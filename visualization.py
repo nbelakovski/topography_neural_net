@@ -45,7 +45,7 @@ for scene in data:
                 t=90
         ),
         images=[dict(
-                source='https://i2.wp.com/thebigoutside.com/wp-content/uploads/2014/04/Glacier1-033-Camp-Upper-Lyman-Lakes-Glacier-Peak-Wilderness-WA.jpg',#'https://raw.githubusercontent.com/cldougl/plot_images/add_r_img/vox.png', #'https://earthexplorer.usgs.gov/browse/lidar/WA/2014/WA_GlacierPeak_2014/WA_GlacierPeak_2014_000070.jpg', #scene[0]['browseUrl'],
+                source='https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/WA_GlacierPeak_2014_000070.jpg',#'https://raw.githubusercontent.com/cldougl/plot_images/add_r_img/vox.png', #'https://earthexplorer.usgs.gov/browse/lidar/WA/2014/WA_GlacierPeak_2014/WA_GlacierPeak_2014_000070.jpg', #scene[0]['browseUrl'],
                 xref="paper", yref="paper",
                 x=-0.07, y=0.88,
                 sizing="stretch",
