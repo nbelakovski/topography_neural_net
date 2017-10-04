@@ -3,20 +3,20 @@
 import pickle
 
 import os
-import plotly.plotly as py
 import plotly.offline as po
 import plotly.tools as pt
 import plotly.graph_objs as go
+import json
 
 import laspy
 
-with open('paired_data.pickle', 'rb') as f:
-    data = pickle.load(f)
+with open('data/paired_data.json', 'r') as f:
+    data = json.load(f)
 # Read data from LAS file
 # Eventually will need to associate an image with its metadata and do cropping, but one thing at a time, let's focus on
 # figuring out the plotly interface for the topographical data
-for scene in data:
-    las_filename = scene[0]['displayId'] + '/' + scene[0]['displayId'] + '.las'
+for i, scene in enumerate(data):
+    las_filename = 'data/' + str(i) + '/' + scene[0]['displayId'] + '/' + scene[0]['displayId'] + '.las'
     print(las_filename)
     if os.path.isfile(las_filename) == False:
         continue
