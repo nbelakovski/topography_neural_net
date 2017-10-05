@@ -1,75 +1,75 @@
-# Goal of this file is to take an image and a topography dataset and make some 3D representation, or 2D with colormap,
-# or something
-import pickle
+# Goal of this file is to take an image and a topography dataset and make some 3D representation
 
 import os
 import plotly.offline as po
 import plotly.tools as pt
 import plotly.graph_objs as go
 import json
+import pickle
+import numpy
 
-import laspy
 
 with open('data/paired_data.json', 'r') as f:
     data = json.load(f)
-# Read data from LAS file
-# Eventually will need to associate an image with its metadata and do cropping, but one thing at a time, let's focus on
-# figuring out the plotly interface for the topographical data
-for i, scene in enumerate(data):
-    las_filename = 'data/' + str(i) + '/' + scene[0]['displayId'] + '.las'
-    print(las_filename)
-    if os.path.isfile(las_filename) == False:
-        continue
-    f = laspy.file.File(las_filename)
-    print(len(f.x), len(f.y), len(f.z))
-    scale = 2000
-    z_data = [f.Z[i*scale] for i in range(0, int(len(f.Z) / scale))]
-    plot_data = [
-        go.Scatter3d(
-                x = [f.X[i*scale] for i in range(0, int(len(f.X) / scale))],
-                y = [f.Y[i*scale] for i in range(0, int(len(f.Y) / scale))],
-                z = z_data,
-                mode = 'markers',
-                marker = {"showscale": True, "color": z_data}
-        )
-    ]
 
+for i, scene in enumerate(data):
+    # Load the topographical information in matrix form. The pickle file should have been created by
+    # convert_las_to_matrix.py
+    pickle_filename = 'data/' + str(i) + '/' + scene[0]['displayId'] + '.pickle'
+    if os.path.isfile(pickle_filename) is False:
+        continue
+    z_data = pickle.load(open(pickle_filename, 'rb'))
+
+    # scale matrix down to something that can be reasonably loaded in an html page
+    matrix_size = 300
+    m = numpy.zeros([matrix_size, matrix_size])
+    scale_factor = int(z_data.shape[0] / matrix_size)
+    for row in range(0, m.shape[0]):
+        zi = int(row/m.shape[0] * (z_data.shape[0] - 1))
+        for col in range(0, m.shape[1]):
+            zj = int(col/m.shape[1] * (z_data.shape[1] - 1))
+            m[row, col] = z_data[zi, zj]
+    # flip the matrix horizontally. Not sure if it was flipped originally, or in the conversions, but here we are
+    m = numpy.fliplr(m)
+
+    # Create a surface plot
+    plot_data = [go.Surface(z=m)]
+
+    # Set up the camera so that the orientation of the surface is similar to the orientation of the associated image
     camera = dict(
             up=dict(x=1, y=0, z=0),
             center=dict(x=0, y=0, z=0),
-            eye=dict(x=0, y=-2, z=1)
+            eye=dict(x=1.6, y=0, z=1.35)
     )
+
+    # Grab the image associated with the lidar dataset to display next to the 3d surface plot. For now, images will be
+    # stored in my github
     image_filename = scene[0]['browseUrl'].split('/')[-1]
-    image_source = 'https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/data/' + str(i) + '/' + image_filename
+    image_source = 'https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/data/' + str(i) + '/' + \
+                   image_filename
     layout = go.Layout(
-        title='Elevation near Glacier Peak, WA',
+        title='Elevations near Glacier Peak, WA',
         autosize=True,
-        # width=1200,
-        # height=800,
-        # margin=dict(
-        #         l=65,
-        #         r=50,
-        #         b=65,
-        #         t=90
-        # ),
-        images=[dict(
-                source=image_source,#'https://raw.githubusercontent.com/cldougl/plot_images/add_r_img/vox.png', #'https://earthexplorer.usgs.gov/browse/lidar/WA/2014/WA_GlacierPeak_2014/WA_GlacierPeak_2014_000070.jpg', #scene[0]['browseUrl'],
+        images=
+        [
+            dict
+            (
+                source=image_source,
                 xref="paper", yref="paper",
                 x=-0.07, y=0.83,
                 sizing="stretch",
                 sizex=0.4, sizey=0.7, layer="below",
-                xanchor = 'left', yanchor='top'
-        )],
+                xanchor='left', yanchor='top'
+            )
+        ],
     )
-    print(scene[0]['browseUrl'])
 
-    # fig = go.Figure(data=plot_data, layout=layout)
-    fig = pt.make_subplots(1,3, specs=[[{'is_3d':True}, {'is_3d':True}, {'is_3d':True}]])
+    # Set up subplots. One for the lidar image, next for the original data, next for the machine learned data
+    # The first subplot isn't actually used - the image is carefully placed to take up that slot
+    fig = pt.make_subplots(1, 3, specs=[[{'is_3d': False}, {'is_3d': True}, {'is_3d': True}]])
     fig.append_trace(plot_data[0], 1, 2)
     fig['layout'].update(layout)
-    fig['layout'].update(scene2=dict(camera=camera))
+    fig['layout'].update(scene1=dict(camera=camera))  # need to look at console output to determine which key to update
 
+    # PLOT!
     a = po.plot(fig)
-    print(a)
-
-pass
