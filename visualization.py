@@ -16,11 +16,12 @@ with open('data/paired_data.json', 'r') as f:
 # Eventually will need to associate an image with its metadata and do cropping, but one thing at a time, let's focus on
 # figuring out the plotly interface for the topographical data
 for i, scene in enumerate(data):
-    las_filename = 'data/' + str(i) + '/' + scene[0]['displayId'] + '/' + scene[0]['displayId'] + '.las'
+    las_filename = 'data/' + str(i) + '/' + scene[0]['displayId'] + '.las'
     print(las_filename)
     if os.path.isfile(las_filename) == False:
         continue
     f = laspy.file.File(las_filename)
+    print(len(f.x), len(f.y), len(f.z))
     scale = 2000
     z_data = [f.Z[i*scale] for i in range(0, int(len(f.Z) / scale))]
     plot_data = [
@@ -38,6 +39,8 @@ for i, scene in enumerate(data):
             center=dict(x=0, y=0, z=0),
             eye=dict(x=0, y=-2, z=1)
     )
+    image_filename = scene[0]['browseUrl'].split('/')[-1]
+    image_source = 'https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/data/' + str(i) + '/' + image_filename
     layout = go.Layout(
         title='Elevation near Glacier Peak, WA',
         autosize=True,
@@ -50,7 +53,7 @@ for i, scene in enumerate(data):
         #         t=90
         # ),
         images=[dict(
-                source='https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/WA_GlacierPeak_2014_000070.jpg',#'https://raw.githubusercontent.com/cldougl/plot_images/add_r_img/vox.png', #'https://earthexplorer.usgs.gov/browse/lidar/WA/2014/WA_GlacierPeak_2014/WA_GlacierPeak_2014_000070.jpg', #scene[0]['browseUrl'],
+                source=image_source,#'https://raw.githubusercontent.com/cldougl/plot_images/add_r_img/vox.png', #'https://earthexplorer.usgs.gov/browse/lidar/WA/2014/WA_GlacierPeak_2014/WA_GlacierPeak_2014_000070.jpg', #scene[0]['browseUrl'],
                 xref="paper", yref="paper",
                 x=-0.07, y=0.83,
                 sizing="stretch",
