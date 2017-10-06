@@ -41,6 +41,18 @@ def fill_in_zeros(matrix):
 
                 matrix[i, j] = int(total/number)
 
+
+def count_zeros(matrix):
+    rows = matrix.shape[0]
+    cols = matrix.shape[1]
+    counter = 0
+    for i in range(0, rows - 1):
+        for j in range(0, cols - 1):
+            if matrix[i, j] == 0:
+                counter += 1
+    print("Found",counter,"zeros")
+
+
 def convert(folder_name):
     las_filename = folder_name + '/' + [x for x in os.listdir(folder_name) if x[-3:] == 'las'][0]
     print(las_filename)
@@ -54,7 +66,7 @@ def convert(folder_name):
     # obviously, computing with integers is much faster than with floats
     assert (len(f.Z) == len(f.X))
     assert (len(f.X) == len(f.Y))
-    matrix_size = int(numpy.floor(numpy.sqrt(len(f.Z))))
+    matrix_size = int(numpy.sqrt(len(f.Z)))  # int will also floor
     m = numpy.zeros([matrix_size, matrix_size])
     # grab the min/max X and Y values so as to do the calculation only once
     xmin = min(f.X)
@@ -63,17 +75,20 @@ def convert(folder_name):
     dy = max(f.Y) - ymin
     for i in range(0, len(f.Z)):
         x = f.X[i]
-        row = int(numpy.floor((x-xmin)/dx * (matrix_size - 1)))
+        col = int(numpy.floor((x - xmin) / dx * (matrix_size - 1)))
         y = f.Y[i]
-        col = int(numpy.floor((y-ymin)/dy * (matrix_size - 1)))
+        row = int(numpy.floor((y - ymin) / dy * (matrix_size - 1)))
 
         m[row, col] = f.Z[i]
         if i % 1000000 == 0:
             print(i)
-    print("filling in zeros...")
-    fill_in_zeros(m)
-    print("filling in zeros...done")
-    pickle.dump(m, open(las_filename.split('.')[0] + '.pickle', 'wb'))
+    print("Done, counting 0's")
+    count_zeros(m)
+    print("Filling in 0's...")
+    fill_in_zeros(m)  # fill in 0's here since it's better to do it with full resolution data than after subsampling
+    print("Filling in 0's...done")
+    count_zeros(m)
+    m.dump(open(las_filename.split('.')[0] + '.pickle', 'wb'))
 
 
 # noinspection PyArgumentList
