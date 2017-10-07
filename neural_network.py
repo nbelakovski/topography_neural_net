@@ -27,8 +27,8 @@ import tensorflow as tf
 
 FLAGS = None
 
-output_size = 50
-crop_size = 200
+output_size = 150
+crop_size = 900
 
 
 def deepnn(x):
@@ -52,32 +52,40 @@ def deepnn(x):
 
     # First convolutional layer - maps one grayscale image to 32 feature maps.
     with tf.name_scope('conv1'):
-        w_conv1 = weight_variable([5, 5, 3, 32])
-        b_conv1 = bias_variable([32])
+        w_conv1 = weight_variable([5, 5, 3, 64])
+        b_conv1 = bias_variable([64])
         h_conv1 = tf.nn.relu(conv2d(x_image, w_conv1) + b_conv1)
 
     # Pooling layer - downsamples by 2X.
     with tf.name_scope('pool1'):
-        h_pool1 = max_pool_2x2(h_conv1)
+        h_pool1 = max_pool_3x3(h_conv1)
 
-    # Second convolutional layer -- maps 32 feature maps to 64.
+    # Second convolutional layer -- maps 64 feature maps to 64.
     with tf.name_scope('conv2'):
-        w_conv2 = weight_variable([5, 5, 32, 64])
+        w_conv2 = weight_variable([5, 5, 64, 64])
         b_conv2 = bias_variable([64])
         h_conv2 = tf.nn.relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
     # Second pooling layer.
     with tf.name_scope('pool2'):
-        h_pool2 = max_pool_2x2(h_conv2)
+        h_pool2 = max_pool_3x3(h_conv2)
 
-    # Fully connected layer 1 -- after 2 round of downsampling, our 993x1009 image
-    # is down to 248x252x64 feature maps -- maps this to 500x500 features, which is
-    # the final output
+    # Third convolutional layer -- maps 64 feature maps to 32.
+    with tf.name_scope('conv3'):
+        w_conv3 = weight_variable([5, 5, 64, 32])
+        b_conv3 = bias_variable([32])
+        h_conv3 = tf.nn.relu(conv2d(h_pool2, w_conv3) + b_conv3)
+
+    # Third pooling layer.
+    with tf.name_scope('pool3'):
+        h_pool3 = max_pool_2x2(h_conv3)
+
+    # Fully connected layer 1 -- some downsampling means we have a new resolution
     with tf.name_scope('fc1'):
-        w_fc1 = weight_variable([int(crop_size/4) * int(crop_size/4) * 64, output_size * output_size])
+        w_fc1 = weight_variable([int(crop_size/18) * int(crop_size/18) * 32, output_size * output_size])
         b_fc1 = bias_variable([output_size * output_size])
 
-        h_pool2_flat = tf.reshape(h_pool2, [-1, int(crop_size/4) * int(crop_size/4) * 64])
+        h_pool2_flat = tf.reshape(h_pool3, [-1, int(crop_size/18) * int(crop_size/18) * 32])
         h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, w_fc1) + b_fc1)
 
         # Dropout - controls the complexity of the model, prevents co-adaptation of
@@ -104,6 +112,12 @@ def max_pool_2x2(x):
     """max_pool_2x2 downsamples a feature map by 2X."""
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
                           strides=[1, 2, 2, 1], padding='SAME')
+
+
+def max_pool_3x3(x):
+    """max_pool_3x3 downsamples a feature map by 3X."""
+    return tf.nn.max_pool(x, ksize=[1, 3, 3, 1],
+                          strides=[1, 3, 3, 1], padding='SAME')
 
 
 def weight_variable(shape):
@@ -146,7 +160,7 @@ def main(_):
     # y_conv, keep_prob = deepnn(x)
 
     with tf.name_scope('loss'):
-        cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=y_,
+        cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=y_,
                                                                 logits=y_conv)
     cross_entropy = tf.reduce_mean(cross_entropy)
 
@@ -154,8 +168,8 @@ def main(_):
         train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
 
     with tf.name_scope('accuracy'):
-        correct_prediction = tf.equal(tf.argmax(y_conv, 1), tf.argmax(y_, 1))
-        correct_prediction = tf.cast(correct_prediction, tf.float32)
+        correct_prediction = tf.squared_difference(y_conv, y_)
+        # correct_prediction = tf.cast(correct_prediction, tf.float32)
     accuracy = tf.reduce_mean(correct_prediction)
 
     graph_location = tempfile.mkdtemp()
@@ -186,7 +200,7 @@ def main(_):
         print("Initializing global variables...")
         sess.run(tf.global_variables_initializer())
         print("Initializing global variables...done")
-        for i in range(50):
+        for i in range(5):
             # batch = mnist.train.next_batch(50) # Here: import jp2 file and pickle things
             print("Creating batch...")
             batch = [[jp2file1, jp2file2], [output1, output2]]
