@@ -1,7 +1,7 @@
 import laspy
 import numpy
 import os
-import pickle
+
 
 def fill_in_zeros(matrix):
     rows = matrix.shape[0]
@@ -12,7 +12,7 @@ def fill_in_zeros(matrix):
                 # fill it in with the average of neighboring values
                 total = 0
                 number = 0
-                if i>0 and j > 0 and matrix[i-1,j-1] != 0:
+                if i > 0 and j > 0 and matrix[i-1, j-1] != 0:
                     total += matrix[i-1, j-1]
                     number += 1
                 if j > 0 and matrix[i, j-1] != 0:
@@ -50,7 +50,7 @@ def count_zeros(matrix):
         for j in range(0, cols - 1):
             if matrix[i, j] == 0:
                 counter += 1
-    print("Found",counter,"zeros")
+    print("Found", counter, "zeros")
 
 
 def convert(folder_name):
@@ -88,7 +88,7 @@ def convert(folder_name):
     fill_in_zeros(m)  # fill in 0's here since it's better to do it with full resolution data than after subsampling
     print("Filling in 0's...done")
     count_zeros(m)
-    m.dump(open(las_filename.split('.')[0] + '.pickle', 'wb'))
+    m.dump(las_filename.split('.')[0] + '.pickle')
 
 
 # noinspection PyArgumentList

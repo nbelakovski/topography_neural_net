@@ -27,7 +27,8 @@ import tensorflow as tf
 
 FLAGS = None
 
-output_size = 500
+output_size = 50
+crop_size = 200
 
 
 def deepnn(x):
@@ -47,7 +48,7 @@ def deepnn(x):
     # Last dimension is for "features" - there is only one here, since images are
     # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
     with tf.name_scope('reshape'):
-        x_image = tf.reshape(x, [-1, 993, 1009, 3])
+        x_image = tf.reshape(x, [-1, crop_size, crop_size, 3])
 
     # First convolutional layer - maps one grayscale image to 32 feature maps.
     with tf.name_scope('conv1'):
@@ -73,10 +74,10 @@ def deepnn(x):
     # is down to 248x252x64 feature maps -- maps this to 500x500 features, which is
     # the final output
     with tf.name_scope('fc1'):
-        w_fc1 = weight_variable([248 * 252 * 64, output_size * output_size])
+        w_fc1 = weight_variable([int(crop_size/4) * int(crop_size/4) * 64, output_size * output_size])
         b_fc1 = bias_variable([output_size * output_size])
 
-        h_pool2_flat = tf.reshape(h_pool2, [-1, 248 * 252 * 64])
+        h_pool2_flat = tf.reshape(h_pool2, [-1, int(crop_size/4) * int(crop_size/4) * 64])
         h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, w_fc1) + b_fc1)
 
         # Dropout - controls the complexity of the model, prevents co-adaptation of
@@ -135,7 +136,7 @@ def main(_):
     # mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
 
     # Create the model
-    x = tf.placeholder(tf.float32, [None, 993, 1009, 3])
+    x = tf.placeholder(tf.float32, [None, crop_size, crop_size, 3])
 
     # Define loss and optimizer
     y_ = tf.placeholder(tf.float32, [None, output_size, output_size])
@@ -163,9 +164,9 @@ def main(_):
     train_writer.add_graph(tf.get_default_graph())
 
     print("Loading jp2 files...")
-    jp2file1 = glymur.Jp2k('data/0/cropped.jp2')
-    jp2file2 = glymur.Jp2k('data/1/cropped.jp2')
-    jp2file3 = glymur.Jp2k('data/2/cropped.jp2')
+    jp2file1 = glymur.Jp2k('data/0/cropped.jp2')[0:crop_size, 0:crop_size, :]
+    jp2file2 = glymur.Jp2k('data/1/cropped.jp2')[0:crop_size, 0:crop_size, :]
+    jp2file3 = glymur.Jp2k('data/2/cropped.jp2')[0:crop_size, 0:crop_size, :]
     print("Loading jp2 files...done")
 
     print("Loading pickle files...")
@@ -185,7 +186,7 @@ def main(_):
         print("Initializing global variables...")
         sess.run(tf.global_variables_initializer())
         print("Initializing global variables...done")
-        for i in range(5):
+        for i in range(50):
             # batch = mnist.train.next_batch(50) # Here: import jp2 file and pickle things
             print("Creating batch...")
             batch = [[jp2file1, jp2file2], [output1, output2]]
