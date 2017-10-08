@@ -29,8 +29,6 @@ for i, scene in enumerate(data):
         for col in range(0, m.shape[1]):
             zj = int(col/m.shape[1] * (z_data.shape[1] - 1))
             m[row, col] = z_data[zi, zj]
-    # flip the matrix horizontally. Not sure if it was flipped originally, or in the conversions, but here we are
-    m = numpy.fliplr(m)
 
     # Create a surface plot
     plot_data = [go.Surface(z=m)]
@@ -39,7 +37,7 @@ for i, scene in enumerate(data):
     camera = dict(
             up=dict(x=1, y=0, z=0),
             center=dict(x=0, y=0, z=0),
-            eye=dict(x=1.6, y=0, z=1.35)
+            eye=dict(x=0, y=-1.6, z=1.35)
     )
 
     # Grab the image associated with the lidar dataset to display next to the 3d surface plot. For now, images will be
