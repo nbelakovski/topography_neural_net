@@ -42,7 +42,7 @@ for i, scene in enumerate(data):
 
     # Grab the image associated with the lidar dataset to display next to the 3d surface plot. For now, images will be
     # stored in my github
-    image_filename = 'cropped.jp2'
+    image_filename = 'cropped.jpg'
     image_source = 'https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/data/' + str(i) + '/' + \
                    image_filename
     layout = go.Layout(
@@ -84,4 +84,3 @@ for i, scene in enumerate(data):
 
     # PLOT!
     a = po.plot(fig)
-    break
