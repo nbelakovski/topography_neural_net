@@ -65,11 +65,15 @@ def crop(folder_name):
 
     # d)
     cropped = jp2_file[newheight1:newheight2, newwidth1:newwidth2]
-    glymur.Jp2k(folder_name + '/cropped.jp2', data=cropped)
+    newfile = glymur.Jp2k(folder_name + '/cropped.jp2', data=cropped, colorspace='gray')
+    print(newfile.shape)
 
 
 print(os.getcwd())
 # noinspection PyArgumentList
 data_directories = [x for x in os.listdir() if x.isdigit()]
+data_directories.sort(key=lambda x: int(x))
 for directory in data_directories:
+    if int(directory) > 110:
+        continue
     crop(directory)

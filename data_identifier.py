@@ -12,10 +12,10 @@ API_key = "436411e433824075ae241eb8abc83824"
 # west_coast_sw_lon = -125.0
 # west_coast_ne_lat = 49.0
 # west_coast_ne_lon = -119.0
-west_coast_sw_lat = 48.04
-west_coast_sw_lon = -121.122
-west_coast_ne_lat = 48.05
-west_coast_ne_lon = -121.1
+west_coast_sw_lat = 48
+west_coast_sw_lon = -121.4
+west_coast_ne_lat = 48.4
+west_coast_ne_lon = -120.7
 
 
 def create_lat_lon_dict(lat, lon):
@@ -65,13 +65,13 @@ def get_topo_data():
             "datasetName": "LIDAR",
             "spatialFilter":
                 create_spatial_filter(west_coast_sw_lat, west_coast_sw_lon, west_coast_ne_lat, west_coast_ne_lon),
-            "maxResults": 10}
-    print(data)
+            "maxResults": 1000}
     r = requests.post(datasets_url, data={'jsonRequest': json.dumps(data)})
 
     if r.json()['errorCode'] is None:
-        print(r.json())
-        return r.json()['data']['results']
+        results = r.json()['data']['results']
+        print("Found", len(results), "pieces of data for specified coordinates")
+        return results
     else:
         print("Failure to obtain datasets, errorCode: ", r.json()['errorCode'])
         sys.exit(-3)
@@ -108,7 +108,6 @@ def get_image_data(input_topo_data):
         ur_lat = floor(float(corners[3]) * 100) / 100
         data = {"apiKey": API_key, "datasetName": "NAIP_COMPRESSED",
                 "spatialFilter": create_spatial_filter(ll_lat, ll_lon, ur_lat, ur_lon), "maxResults": 15}
-        print(data)
         r = requests.post(datasets_url, data={'jsonRequest': json.dumps(data)})
 
         if r.json()['errorCode'] is None:
@@ -127,13 +126,14 @@ def get_image_data(input_topo_data):
                 if overlap > max_overlap:
                     input_image = image_metadata
                     max_overlap = overlap
-            print(r.json())
             # Once the proper image is determined, add its download information to the lidar_scene
             data_pair = (lidar_scene, input_image)
             paired_data.append(data_pair)
         else:
             print("Failure to obtain datasets, return string: ", r.json())
-            break
+
+        if len(paired_data) % 10 == 0:
+            print("Found", len(paired_data), "corresponding images")
 
     return paired_data
 
