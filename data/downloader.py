@@ -24,6 +24,7 @@ del paired_data  # clean up
 def get_api_key():
     login_url = 'https://earthexplorer.usgs.gov/inventory/json/v/1.4.0/login'
     password = open('../password.txt', 'r').readline()
+    password = password.split('\n')[0]
     data = {"username": "nbelakovski", "password": password, "authType": "EROS", "catalogId": "EE"}
     r = requests.post(login_url, data={'jsonRequest': json.dumps(data)})
     if r.json()['errorCode'] is None:
@@ -72,9 +73,6 @@ get_api_key()
 data_directories = [x for x in os.listdir() if x.isdigit()]
 data_directories.sort(key=lambda x: int(x))  # list in numerical order, instead of '0', '1', '10', '11', etc.
 for directory in data_directories:
-    # artificially limiting to 110 entries just for initially playing with the data
-    if int(directory) > 110:
-        continue
 
     print("Going into directory", directory)
     os.chdir(directory)

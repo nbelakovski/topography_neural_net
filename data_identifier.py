@@ -32,6 +32,7 @@ def create_spatial_filter(ll_lat, ll_lon, ur_lat, ur_lon):
 def get_api_key():
     login_url = 'https://earthexplorer.usgs.gov/inventory/json/v/1.4.0/login'
     password = open('password.txt', 'r').readline()
+    password = password.split('\n')[0]
     data = {"username": "nbelakovski", "password": password, "authType": "EROS", "catalogId": "EE"}
     r = requests.post(login_url, data={'jsonRequest': json.dumps(data)})
     if r.json()['errorCode'] is None:
