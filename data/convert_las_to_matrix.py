@@ -1,6 +1,7 @@
 import laspy
 import numpy
 import os
+import sys
 
 
 def fill_in_zeros(matrix):
@@ -39,7 +40,8 @@ def fill_in_zeros(matrix):
                     total += matrix[i+1, j+1]
                     number += 1
 
-                matrix[i, j] = int(total/number)
+                if number > 0:
+                    matrix[i, j] = int(total/number)
 
 
 def count_zeros(matrix):
@@ -91,7 +93,13 @@ def convert(folder_name):
     m.dump(las_filename.split('.')[0] + '.pickle')
 
 
-# noinspection PyArgumentList
-data_directories = [x for x in os.listdir() if x.isdigit()]
-for directory in data_directories:
-    convert(directory)
+
+if __name__ == '__main__':
+    folder1 = int(sys.argv[1])
+    folder2 = int(sys.argv[2])
+    # noinspection PyArgumentList
+    data_directories = [x for x in os.listdir() if x.isdigit()]
+    for directory in data_directories:
+        if int(directory) < folder1 or int(directory) > folder2:
+            continue
+        convert(directory)

@@ -24,10 +24,11 @@ import pickle
 import numpy
 
 import tensorflow as tf
+import os
 
 FLAGS = None
 
-output_size = 150
+output_size = 25
 crop_size = 900
 
 
@@ -47,14 +48,14 @@ def deepnn(x):
     # Reshape to use within a convolutional neural net.
     # Last dimension is for "features" - there is only one here, since images are
     # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
-    with tf.name_scope('reshape'):
-        x_image = tf.reshape(x, [-1, crop_size, crop_size, 3])
+    #with tf.name_scope('reshape'):
+        #x_image = tf.reshape(x, [-1, crop_size, crop_size, 3])
 
     # First convolutional layer - maps one grayscale image to 32 feature maps.
     with tf.name_scope('conv1'):
         w_conv1 = weight_variable([5, 5, 3, 64])
         b_conv1 = bias_variable([64])
-        h_conv1 = tf.nn.relu(conv2d(x_image, w_conv1) + b_conv1)
+        h_conv1 = tf.nn.relu(conv2d(x, w_conv1) + b_conv1)
 
     # Pooling layer - downsamples by 2X.
     with tf.name_scope('pool1'):
@@ -82,10 +83,10 @@ def deepnn(x):
 
     # Fully connected layer 1 -- some downsampling means we have a new resolution
     with tf.name_scope('fc1'):
-        w_fc1 = weight_variable([int(crop_size/18) * int(crop_size/18) * 32, output_size * output_size])
+        w_fc1 = weight_variable([int(1008/18) * int(990/18) * 32, output_size * output_size])
         b_fc1 = bias_variable([output_size * output_size])
 
-        h_pool2_flat = tf.reshape(h_pool3, [-1, int(crop_size/18) * int(crop_size/18) * 32])
+        h_pool2_flat = tf.reshape(h_pool3, [-1, int(1008/18) * int(990/18) * 32])
         h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, w_fc1) + b_fc1)
 
         # Dropout - controls the complexity of the model, prevents co-adaptation of
@@ -99,7 +100,7 @@ def deepnn(x):
         #   w_fc2 = weight_variable([1024, 10])
         #   b_fc2 = bias_variable([10])
 
-        y_conv = tf.reshape(h_fc1, [-1, output_size, output_size])
+        y_conv = tf.reshape(h_fc1, [-1, output_size, output_size], name="final_op")
     return y_conv  # , keep_prob
 
 
@@ -150,14 +151,13 @@ def main(_):
     # mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
 
     # Create the model
-    x = tf.placeholder(tf.float32, [None, crop_size, crop_size, 3])
+    x = tf.placeholder(tf.float32, [None, 1008, 990, 3], name="input")
 
     # Define loss and optimizer
     y_ = tf.placeholder(tf.float32, [None, output_size, output_size])
 
     # Build the graph for the deep net
     y_conv = deepnn(x)
-    # y_conv, keep_prob = deepnn(x)
 
     with tf.name_scope('loss'):
         cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=y_,
@@ -178,15 +178,15 @@ def main(_):
     train_writer.add_graph(tf.get_default_graph())
 
     print("Loading jp2 files...")
-    jp2file1 = glymur.Jp2k('data/0/cropped.jp2')[0:crop_size, 0:crop_size, :]
-    jp2file2 = glymur.Jp2k('data/1/cropped.jp2')[0:crop_size, 0:crop_size, :]
-    jp2file3 = glymur.Jp2k('data/2/cropped.jp2')[0:crop_size, 0:crop_size, :]
+    jp2file3 = glymur.Jp2k('data/12/cropped.jp2')[0:1008, 0:990, :]
+    jp2file1 = glymur.Jp2k('data/13/cropped.jp2')[0:1008, 0:990, :]
+    jp2file2 = glymur.Jp2k('data/14/cropped.jp2')[0:1008, 0:990, :]
     print("Loading jp2 files...done")
 
     print("Loading pickle files...")
-    output1 = pickle.load(open('data/0/WA_GlacierPeak_2014_000070.pickle', 'rb'))
-    output2 = pickle.load(open('data/1/WA_GlacierPeak_2014_000013.pickle', 'rb'))
-    output3 = pickle.load(open('data/2/WA_GlacierPeak_2014_000069.pickle', 'rb'))
+    output3 = pickle.load(open('data/12/WA_GlacierPeak_2014_000294.pickle', 'rb'))
+    output1 = pickle.load(open('data/13/WA_GlacierPeak_2014_000310.pickle', 'rb'))
+    output2 = pickle.load(open('data/14/WA_GlacierPeak_2014_000325.pickle', 'rb'))
     print("Loading pickle files...done")
 
     # Need to redo the matrices to fit the chosen output size
@@ -195,6 +195,11 @@ def main(_):
     output2 = subsample_matrix(output2, output_size)
     output3 = subsample_matrix(output3, output_size)
     print("Reducing pickle files...done")
+
+    saver = tf.train.Saver()
+    model_directory = "tnn_model"
+    model_name = "tnn"
+    model_path = os.path.join(model_directory, model_name)
 
     with tf.Session() as sess:
         print("Initializing global variables...")
@@ -207,7 +212,7 @@ def main(_):
             if i % 2 == 0:
                 print("Evaluating training accuracy:")
                 train_accuracy = accuracy.eval(feed_dict={
-                    x: batch[0], y_: batch[1]})  # , keep_prob: 1.0})
+                    x: batch[0], y_: batch[1]})
                 print('step %d, training accuracy %g' % (i, train_accuracy))
             print("Running training", i, "...")
             train_step.run(feed_dict={x: batch[0], y_: batch[1]})  # , keep_prob: 0.5})
@@ -215,7 +220,8 @@ def main(_):
 
         # Here: import jp2 file and
         print('test accuracy %g' % accuracy.eval(feed_dict={
-            x: [jp2file3], y_: [output3]}))  # , keep_prob: 1.0}))
+            x: [jp2file3], y_: [output3]}))
+        saver.save(sess, model_path)
 
 
 if __name__ == '__main__':

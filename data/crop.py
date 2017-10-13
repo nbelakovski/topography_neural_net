@@ -64,8 +64,8 @@ def crop(folder_name):
     # since the net needs a consistent input shape, but we'll deal with that after trying a few more
 
     # d)
-    cropped = jp2_file[newheight1:newheight2, newwidth1:newwidth2]
-    newfile = glymur.Jp2k(folder_name + '/cropped.jp2', data=cropped, colorspace='gray')
+    cropped = jp2_file[newheight1:newheight2, newwidth1:newwidth2, :]
+    newfile = glymur.Jp2k(folder_name + '/cropped.jp2', data=cropped)
     print(newfile.shape)
 
 
