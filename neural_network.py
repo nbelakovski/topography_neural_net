@@ -178,49 +178,79 @@ def main(_):
     train_writer.add_graph(tf.get_default_graph())
 
     print("Loading jp2 files...")
-    jp2file3 = glymur.Jp2k('data/12/cropped.jp2')[0:1008, 0:990, :]
-    jp2file1 = glymur.Jp2k('data/13/cropped.jp2')[0:1008, 0:990, :]
-    jp2file2 = glymur.Jp2k('data/14/cropped.jp2')[0:1008, 0:990, :]
+    data_directories = [x for x in os.listdir('data') if x.isdigit()]
+    data_directories.sort(key=lambda x: int(x))
+    images = []
+    directories_used = []
+    for directory in data_directories:
+        if int(directory) > 110:
+            continue
+        jp2_file = glymur.Jp2k(os.path.join('data', directory, 'cropped.jp2'))
+        image_height = jp2_file.shape[0]
+        image_width = jp2_file.shape[1]
+        if image_height < 1008 or image_height > 1015:
+            continue
+        if image_width < 990 or image_width > 995:
+            continue
+        images.append(jp2_file[0:1008, 0:990, :])
+        directories_used.append(directory)
     print("Loading jp2 files...done")
 
     print("Loading pickle files...")
-    output3 = pickle.load(open('data/12/WA_GlacierPeak_2014_000294.pickle', 'rb'))
-    output1 = pickle.load(open('data/13/WA_GlacierPeak_2014_000310.pickle', 'rb'))
-    output2 = pickle.load(open('data/14/WA_GlacierPeak_2014_000325.pickle', 'rb'))
+    topography = []
+    for directory in directories_used:
+        pickle_filename = [x for x in os.listdir(os.path.join('data', directory)) if x[-6:] == 'pickle'][0]
+        topography.append(pickle.load(open(os.path.join('data', directory, pickle_filename), 'rb')))
+
     print("Loading pickle files...done")
 
     # Need to redo the matrices to fit the chosen output size
     print("Reducing pickle files...")
-    output1 = subsample_matrix(output1, output_size)
-    output2 = subsample_matrix(output2, output_size)
-    output3 = subsample_matrix(output3, output_size)
+    subsampled_topography = []
+    for item in topography:
+        subsampled_topography.append(subsample_matrix(item, output_size))
     print("Reducing pickle files...done")
+
+    # Now we should split the data into training/test set
+    total_data = len(directories_used)
+    split = 0.9
+    training_data_total = int(split * total_data)
+    training_images = images[:training_data_total]
+    test_images = images[training_data_total:]
+    training_topo = subsampled_topography[:training_data_total]
+    test_topo = subsampled_topography[training_data_total:]
 
     saver = tf.train.Saver()
     model_directory = "tnn_model"
     model_name = "tnn"
     model_path = os.path.join(model_directory, model_name)
+    batch_size = 12
+    total_batches = int(len(training_images) / batch_size)  # if it's not a perfect multiple, we'll leave out a few images
 
     with tf.Session() as sess:
         print("Initializing global variables...")
         sess.run(tf.global_variables_initializer())
         print("Initializing global variables...done")
-        for i in range(5):
-            # batch = mnist.train.next_batch(50) # Here: import jp2 file and pickle things
+        for i in range(1000):
             print("Creating batch...")
-            batch = [[jp2file1, jp2file2], [output1, output2]]
+            batch_section = i % total_batches
+            batch_start = batch_section*batch_size
+            batch_end = (batch_section+1)*batch_size
+            print(i, batch_start, batch_end)
+            batch = [training_images[batch_start:batch_end], training_topo[batch_start:batch_end]]
+            print("Creating batch...done")
             if i % 2 == 0:
                 print("Evaluating training accuracy:")
                 train_accuracy = accuracy.eval(feed_dict={
                     x: batch[0], y_: batch[1]})
                 print('step %d, training accuracy %g' % (i, train_accuracy))
             print("Running training", i, "...")
-            train_step.run(feed_dict={x: batch[0], y_: batch[1]})  # , keep_prob: 0.5})
+            train_step.run(feed_dict={x: batch[0], y_: batch[1]})
             print("Running training", i, "...done")
 
         # Here: import jp2 file and
         print('test accuracy %g' % accuracy.eval(feed_dict={
-            x: [jp2file3], y_: [output3]}))
+            x: test_images, y_: test_topo}))
         saver.save(sess, model_path)
 
 
