@@ -28,7 +28,7 @@ import os
 
 FLAGS = None
 
-output_size = 25
+output_size = 250
 crop_size = 900
 
 
@@ -55,7 +55,9 @@ def deepnn(x):
     with tf.name_scope('conv1'):
         w_conv1 = weight_variable([5, 5, 3, 64])
         b_conv1 = bias_variable([64])
-        h_conv1 = tf.nn.relu(conv2d(x, w_conv1) + b_conv1)
+        temp = conv2d(x, w_conv1)
+        h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
+        tf.summary.histogram('histogram', h_conv1)
 
     # Pooling layer - downsamples by 2X.
     with tf.name_scope('pool1'):
@@ -81,13 +83,28 @@ def deepnn(x):
     with tf.name_scope('pool3'):
         h_pool3 = max_pool_2x2(h_conv3)
 
-    # Fully connected layer 1 -- some downsampling means we have a new resolution
-    with tf.name_scope('fc1'):
-        w_fc1 = weight_variable([int(1008/18) * int(990/18) * 32, output_size * output_size])
-        b_fc1 = bias_variable([output_size * output_size])
+    # Fourth convolutional layer -- maps 32 feature maps to 16.
+    with tf.name_scope('conv4'):
+        w_conv4 = weight_variable([5, 5, 32, 16])
+        b_conv4 = bias_variable([16])
+        h_conv4 = tf.nn.relu(conv2d(h_pool3, w_conv4) + b_conv4)
 
-        h_pool2_flat = tf.reshape(h_pool3, [-1, int(1008/18) * int(990/18) * 32])
-        h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, w_fc1) + b_fc1)
+    # Fourth pooling layer.
+    with tf.name_scope('pool4'):
+        h_pool4 = max_pool_2x2(h_conv4)
+
+    # Fully connected layer 1 -- some downsampling means we have a new resolution
+    number_of_fully_connected_neurons = 1000
+    with tf.name_scope('fc1'):
+        total_shape = 1
+        for dim in h_pool4.shape.dims:
+            if dim.value:
+                total_shape *= dim.value
+        w_fc1 = weight_variable([total_shape, number_of_fully_connected_neurons])
+        b_fc1 = bias_variable([number_of_fully_connected_neurons])
+
+        h_pool4_flat = tf.reshape(h_pool4, [-1, total_shape])
+        h_fc1 = tf.nn.relu(tf.matmul(h_pool4_flat, w_fc1) + b_fc1)
 
         # Dropout - controls the complexity of the model, prevents co-adaptation of
         # features.
@@ -100,7 +117,12 @@ def deepnn(x):
         #   w_fc2 = weight_variable([1024, 10])
         #   b_fc2 = bias_variable([10])
 
-        y_conv = tf.reshape(h_fc1, [-1, output_size, output_size], name="final_op")
+        # y_conv = tf.reshape(h_fc1, [-1, output_size, output_size], name="final_op")
+    with tf.name_scope('output'):
+        w_output = weight_variable([number_of_fully_connected_neurons, output_size * output_size])
+        b_output = bias_variable([output_size * output_size])
+        h_output = tf.nn.relu(tf.matmul(h_fc1, w_output) + b_output)
+        y_conv = tf.reshape(h_output, [-1, output_size, output_size], name="final_op")
     return y_conv  # , keep_prob
 
 
@@ -145,6 +167,17 @@ def subsample_matrix(matrix, newsize):
             m[newrow, newcol] = matrix[row, col]
     return m
 
+def import_pickle_files(directories):
+    topography_data = []
+    for i, directory in enumerate(directories):
+        pickle_filename = [x for x in os.listdir(os.path.join('data', directory)) if x[-6:] == 'pickle'][0]
+        data = pickle.load(open(os.path.join('data', directory, pickle_filename), 'rb'))
+        topography_data.append(subsample_matrix(data, output_size))
+        del data
+        if i % 25 == 0:
+            print("Processed", i, "pickle files")
+    return topography_data
+
 
 def main(_):
     # Import data
@@ -160,17 +193,17 @@ def main(_):
     y_conv = deepnn(x)
 
     with tf.name_scope('loss'):
-        cross_entropy = tf.nn.sigmoid_cross_entropy_with_logits(labels=y_,
-                                                                logits=y_conv)
-    cross_entropy = tf.reduce_mean(cross_entropy)
+        mean_squared_e = tf.losses.mean_squared_error(labels=y_,
+                                                      predictions=y_conv)
+    # mean_squared_e = tf.reduce_mean(mean_squared_e)
 
     with tf.name_scope('adam_optimizer'):
-        train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+        train_step = tf.train.AdamOptimizer(1e-4).minimize(mean_squared_e)
 
-    with tf.name_scope('accuracy'):
-        correct_prediction = tf.squared_difference(y_conv, y_)
-        # correct_prediction = tf.cast(correct_prediction, tf.float32)
-    accuracy = tf.reduce_mean(correct_prediction)
+    # with tf.name_scope('accuracy'):
+    #     correct_prediction = tf.squared_difference(y_conv, y_)
+    #     # correct_prediction = tf.cast(correct_prediction, tf.float32)
+    # accuracy = tf.reduce_mean(correct_prediction)
 
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)
@@ -196,20 +229,12 @@ def main(_):
         directories_used.append(directory)
     print("Loading jp2 files...done")
 
+    # TODO on the pickle files:
+    # In order to reduce memory usage, the pickle files should be loaded one by one and reduced right away, and then
+    # the original file should be 'del'ed (from memory, obviously)
     print("Loading pickle files...")
-    topography = []
-    for directory in directories_used:
-        pickle_filename = [x for x in os.listdir(os.path.join('data', directory)) if x[-6:] == 'pickle'][0]
-        topography.append(pickle.load(open(os.path.join('data', directory, pickle_filename), 'rb')))
-
+    subsampled_topography = import_pickle_files(directories_used)
     print("Loading pickle files...done")
-
-    # Need to redo the matrices to fit the chosen output size
-    print("Reducing pickle files...")
-    subsampled_topography = []
-    for item in topography:
-        subsampled_topography.append(subsample_matrix(item, output_size))
-    print("Reducing pickle files...done")
 
     # Now we should split the data into training/test set
     total_data = len(directories_used)
@@ -224,14 +249,20 @@ def main(_):
     model_directory = "tnn_model"
     model_name = "tnn"
     model_path = os.path.join(model_directory, model_name)
-    batch_size = 12
+    batch_size = 3
     total_batches = int(len(training_images) / batch_size)  # if it's not a perfect multiple, we'll leave out a few images
 
-    with tf.Session() as sess:
+    # In attempting to deal with GPU issues, I will try to get tensorflow to only allocate gpu memory as needed, instead
+    # of having it allocate all the GPU memory, which is what it does by default
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    merged = tf.summary.merge_all()
+
+    with tf.Session(config=config) as sess:
         print("Initializing global variables...")
         sess.run(tf.global_variables_initializer())
         print("Initializing global variables...done")
-        for i in range(1000):
+        for i in range(11000):
             print("Creating batch...")
             batch_section = i % total_batches
             batch_start = batch_section*batch_size
@@ -239,19 +270,26 @@ def main(_):
             print(i, batch_start, batch_end)
             batch = [training_images[batch_start:batch_end], training_topo[batch_start:batch_end]]
             print("Creating batch...done")
-            if i % 2 == 0:
+            if i > 0 and i % 50 == 0:
                 print("Evaluating training accuracy:")
-                train_accuracy = accuracy.eval(feed_dict={
-                    x: batch[0], y_: batch[1]})
+                train_accuracy = mean_squared_e.eval(feed_dict={
+                    x: training_images[0:3], y_: training_topo[0:3]})
                 print('step %d, training accuracy %g' % (i, train_accuracy))
+                saver.save(sess, model_path)
             print("Running training", i, "...")
-            train_step.run(feed_dict={x: batch[0], y_: batch[1]})
+            # train_step.run(feed_dict={x: batch[0], y_: batch[1]})
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+            summary, tmp = sess.run([merged, train_step], feed_dict={x: batch[0], y_: batch[1]}, options=run_options, run_metadata=run_metadata)
+            # run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            # run_metadata = tf.RunMetadata()
             print("Running training", i, "...done")
+            train_writer.add_run_metadata(run_metadata, 'step %d' % i)
+            train_writer.add_summary(summary, i)
 
-        # Here: import jp2 file and
-        print('test accuracy %g' % accuracy.eval(feed_dict={
-            x: test_images, y_: test_topo}))
         saver.save(sess, model_path)
+        print('test accuracy %g' % mean_squared_e.eval(feed_dict={
+            x: test_images, y_: test_topo}))
 
 
 if __name__ == '__main__':
