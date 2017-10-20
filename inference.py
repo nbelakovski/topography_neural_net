@@ -3,6 +3,7 @@
 """A deep  classifier using convolutional layers.
 """
 import glymur
+import pickle
 import tensorflow as tf
 import os
 import sys
@@ -20,17 +21,18 @@ def main(args):
     saver.restore(sess, tf.train.latest_checkpoint(model_directory))
     graph = tf.get_default_graph()
     x = graph.get_tensor_by_name("input:0")
-    op = graph.get_tensor_by_name("fc1/final_op:0")
+    op = graph.get_tensor_by_name("output/final_op:0")
 
     jp2_filename = 'data/15/cropped.jp2'
     jp2_file = glymur.Jp2k(jp2_filename)
     data = jp2_file[0:1008, 0:990, :]
 
-    feed_dict1 = {x: [data]}
+    feed_dict1 = {x: [data, data, data]}
 
     print("Running session")
     out = sess.run(op, feed_dict=feed_dict1)
-    print(out)
+    print(out[0])
+    pickle.dump(out[0], open('test.pickle', 'wb'))
 
 
 if __name__ == '__main__':

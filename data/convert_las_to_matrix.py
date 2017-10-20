@@ -1,7 +1,9 @@
+from multiprocessing.pool import Pool
+
 import laspy
 import numpy
 import os
-import sys
+from subsample_matrix import subsample_matrix
 
 
 def fill_in_zeros(matrix):
@@ -53,10 +55,17 @@ def count_zeros(matrix):
             if matrix[i, j] == 0:
                 counter += 1
     print("Found", counter, "zeros")
+    return counter
 
 
 def convert(folder_name):
-    las_filename = folder_name + '/' + [x for x in os.listdir(folder_name) if x[-3:] == 'las'][0]
+    os.chdir(folder_name)
+    las_filename = [x for x in os.listdir() if x[-3:] == 'las'][0]
+    if os.path.exists('failed.txt'):
+        os.remove(las_filename)
+        os.chdir('..')
+        return
+
     print(las_filename)
     f = laspy.file.File(las_filename)
     # so now we have f.X, f.Y, and f.Z, which should all be the same size. We need to make a matrix
@@ -83,23 +92,26 @@ def convert(folder_name):
 
         m[row, col] = f.Z[i]
         if i % 1000000 == 0:
-            print(i)
-    print("Done, counting 0's")
-    count_zeros(m)
-    print("Filling in 0's...")
-    fill_in_zeros(m)  # fill in 0's here since it's better to do it with full resolution data than after subsampling
-    print("Filling in 0's...done")
-    count_zeros(m)
+            print(las_filename, i)
+    if count_zeros(m) > 0:
+        print(las_filename, "Filling in 0's...")
+        fill_in_zeros(m)
+    matrix_size = 500
+    m = subsample_matrix(m, matrix_size)
+    if count_zeros(m) > 0:
+        print(las_filename, "Filling in 0's on subsampled matrix...")
+        fill_in_zeros(m)
+    # Not going to worry too much about filling in 0's. They're annoying, but there should be significantly more
+    # meaningful data than 0 data, and hopefully the net figures out to ignore the 0 data
     m.dump(las_filename.split('.')[0] + '.pickle')
+    os.remove(las_filename)
+    with open('pickled', 'w') as f:
+        f.write('')  # This file indicates success to the pipeline
+    os.chdir('..')
 
 
-
-if __name__ == '__main__':
-    folder1 = int(sys.argv[1])
-    folder2 = int(sys.argv[2])
-    # noinspection PyArgumentList
-    data_directories = [x for x in os.listdir() if x.isdigit()]
-    for directory in data_directories:
-        if int(directory) < folder1 or int(directory) > folder2:
-            continue
-        convert(directory)
+with open('folders_to_process.txt', 'r') as f:
+    directories = f.read().splitlines()
+os.chdir('preprocessing')
+with Pool(20) as p:
+    p.map(convert, directories)

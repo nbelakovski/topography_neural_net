@@ -25,10 +25,13 @@ import numpy
 
 import tensorflow as tf
 import os
+from data.subsample_matrix import subsample_matrix
 
 FLAGS = None
 
-output_size = 250
+# TODO: Change directory imports to data/completed. First let's get a fuckton of data there!
+
+output_size = 28*8
 crop_size = 900
 
 
@@ -93,18 +96,40 @@ def deepnn(x):
     with tf.name_scope('pool4'):
         h_pool4 = max_pool_2x2(h_conv4)
 
-    # Fully connected layer 1 -- some downsampling means we have a new resolution
-    number_of_fully_connected_neurons = 1000
-    with tf.name_scope('fc1'):
-        total_shape = 1
-        for dim in h_pool4.shape.dims:
-            if dim.value:
-                total_shape *= dim.value
-        w_fc1 = weight_variable([total_shape, number_of_fully_connected_neurons])
-        b_fc1 = bias_variable([number_of_fully_connected_neurons])
+    final_pool_dim = h_pool4.shape.dims[1].value
+    with tf.name_scope('deconv1'):
+        stride1 = 2
+        w_deconv1 = weight_variable([7, 7, 8, 16])
+        out_shape = [3, final_pool_dim * stride1, final_pool_dim * stride1, 8]
+        h_deconv1 = tf.nn.relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
-        h_pool4_flat = tf.reshape(h_pool4, [-1, total_shape])
-        h_fc1 = tf.nn.relu(tf.matmul(h_pool4_flat, w_fc1) + b_fc1)
+    with tf.name_scope('deconv2'):
+        stride2 = 2
+        w_deconv2 = weight_variable([7, 7, 4, 8])
+        out_shape = [3, final_pool_dim * stride1 * stride2, final_pool_dim * stride1 * stride2, 4]
+        h_deconv2 = tf.nn.relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
+
+    with tf.name_scope('deconv3'):
+        stride3 = 2
+        w_deconv3 = weight_variable([7, 7, 1, 4])
+        out_shape = [3, final_pool_dim * stride1 * stride2 * stride3, final_pool_dim * stride1 * stride2 * stride3, 1]
+        assert(final_pool_dim * stride1 * stride2 * stride3 == output_size)
+        h_deconv3 = tf.nn.relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
+        # output = tf.constant(0.1, shape=[1, output_size, output_size, 8])
+        # expected_l = conv2d(output, w_deconv, strides=[1,7,7,1])
+    # pass
+    # Fully connected layer 1 -- some downsampling means we have a new resolution
+    # number_of_fully_connected_neurons = 1000
+    # with tf.name_scope('fc1'):
+    #     total_shape = 1
+    #     for dim in h_pool4.shape.dims:
+    #         if dim.value:
+    #             total_shape *= dim.value
+    #     w_fc1 = weight_variable([total_shape, number_of_fully_connected_neurons])
+    #     b_fc1 = bias_variable([number_of_fully_connected_neurons])
+    #
+    #     h_pool4_flat = tf.reshape(h_pool4, [-1, total_shape])
+    #     h_fc1 = tf.nn.relu(tf.matmul(h_pool4_flat, w_fc1) + b_fc1)
 
         # Dropout - controls the complexity of the model, prevents co-adaptation of
         # features.
@@ -119,16 +144,21 @@ def deepnn(x):
 
         # y_conv = tf.reshape(h_fc1, [-1, output_size, output_size], name="final_op")
     with tf.name_scope('output'):
-        w_output = weight_variable([number_of_fully_connected_neurons, output_size * output_size])
-        b_output = bias_variable([output_size * output_size])
-        h_output = tf.nn.relu(tf.matmul(h_fc1, w_output) + b_output)
-        y_conv = tf.reshape(h_output, [-1, output_size, output_size], name="final_op")
+    #     w_output = weight_variable([number_of_fully_connected_neurons, output_size * output_size])
+    #     b_output = bias_variable([output_size * output_size])
+    #     h_output = tf.nn.relu(tf.matmul(h_fc1, w_output) + b_output)
+        y_conv = tf.reshape(h_deconv3, [-1, output_size, output_size], name="final_op")
     return y_conv  # , keep_prob
 
 
-def conv2d(x, w):
+def deconv2d(x, w, output_shape, strides=[1, 1, 1, 1]):
+    """deconv2d returns a 2d deconvolution layer with full stride."""
+    return tf.nn.conv2d_transpose(x, w, output_shape, strides=strides, padding='SAME')
+
+
+def conv2d(x, w, strides=[1, 1, 1, 1]):
     """conv2d returns a 2d convolution layer with full stride."""
-    return tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME')
+    return tf.nn.conv2d(x, w, strides=strides, padding='SAME')
 
 
 def max_pool_2x2(x):
@@ -155,23 +185,11 @@ def bias_variable(shape):
     return tf.Variable(initial)
 
 
-def subsample_matrix(matrix, newsize):
-    m = numpy.zeros([newsize, newsize])
-    rows = matrix.shape[0]
-    cols = matrix.shape[1]
-    step_factor = int(numpy.ceil(rows / newsize))
-    for row in range(0, rows - 1, step_factor):
-        for col in range(0, cols - 1, step_factor):
-            newrow = int(numpy.floor(row / step_factor))
-            newcol = int(numpy.floor(col / step_factor))
-            m[newrow, newcol] = matrix[row, col]
-    return m
-
 def import_pickle_files(directories):
     topography_data = []
     for i, directory in enumerate(directories):
-        pickle_filename = [x for x in os.listdir(os.path.join('data', directory)) if x[-6:] == 'pickle'][0]
-        data = pickle.load(open(os.path.join('data', directory, pickle_filename), 'rb'))
+        pickle_filename = [x for x in os.listdir(os.path.join('data', 'completed', directory)) if x[-6:] == 'pickle'][0]
+        data = pickle.load(open(os.path.join('data', 'completed', directory, pickle_filename), 'rb'))
         topography_data.append(subsample_matrix(data, output_size))
         del data
         if i % 25 == 0:
@@ -180,9 +198,6 @@ def import_pickle_files(directories):
 
 
 def main(_):
-    # Import data
-    # mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
-
     # Create the model
     x = tf.placeholder(tf.float32, [None, 1008, 990, 3], name="input")
 
@@ -211,14 +226,14 @@ def main(_):
     train_writer.add_graph(tf.get_default_graph())
 
     print("Loading jp2 files...")
-    data_directories = [x for x in os.listdir('data') if x.isdigit()]
-    data_directories.sort(key=lambda x: int(x))
+    data_directories = os.listdir('data/completed')
     images = []
     directories_used = []
     for directory in data_directories:
-        if int(directory) > 110:
+        jp2_filename = os.path.join('data/completed', directory, 'cropped.jp2')
+        if not os.path.exists(jp2_filename):
             continue
-        jp2_file = glymur.Jp2k(os.path.join('data', directory, 'cropped.jp2'))
+        jp2_file = glymur.Jp2k(jp2_filename)
         image_height = jp2_file.shape[0]
         image_width = jp2_file.shape[1]
         if image_height < 1008 or image_height > 1015:
@@ -227,11 +242,9 @@ def main(_):
             continue
         images.append(jp2_file[0:1008, 0:990, :])
         directories_used.append(directory)
-    print("Loading jp2 files...done")
+    print("Loading jp2 files...done. Got", len(directories_used), "images")
+    sys.stdout.flush()
 
-    # TODO on the pickle files:
-    # In order to reduce memory usage, the pickle files should be loaded one by one and reduced right away, and then
-    # the original file should be 'del'ed (from memory, obviously)
     print("Loading pickle files...")
     subsampled_topography = import_pickle_files(directories_used)
     print("Loading pickle files...done")
@@ -262,6 +275,7 @@ def main(_):
         print("Initializing global variables...")
         sess.run(tf.global_variables_initializer())
         print("Initializing global variables...done")
+        # TODO: Rearrange this into epochs and batches
         for i in range(11000):
             print("Creating batch...")
             batch_section = i % total_batches
@@ -286,6 +300,7 @@ def main(_):
             print("Running training", i, "...done")
             train_writer.add_run_metadata(run_metadata, 'step %d' % i)
             train_writer.add_summary(summary, i)
+            sys.stdout.flush()
 
         saver.save(sess, model_path)
         print('test accuracy %g' % mean_squared_e.eval(feed_dict={

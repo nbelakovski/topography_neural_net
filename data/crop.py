@@ -1,11 +1,15 @@
-
+import multiprocessing
 import json
 import os
 
 import glymur
 
+standard_height = 1008
+standard_width = 990
 
 def crop(folder_name):
+    if os.path.exists(os.path.join(folder_name, 'cropped.jp2')):
+        return
     # Step 1 - Cropping
     # Method:
     # Overview: Get the geo coordinates of the data from the JSON, use those to figure out where, in pixels the lidar
@@ -47,7 +51,7 @@ def crop(folder_name):
     # List all the files in the directory that end in "jp2" and start with "n_", and then take the first element of that
     # list This way we should be able to reliably get the filename for each data directory. I suppose it could also be
     # taken from the JSON metadata. Either approach should be fine
-    jp2_filename = [x for x in os.listdir(folder_name) if x[-3:] == 'jp2' and x[:2] == "n_"][0]
+    jp2_filename = [x for x in os.listdir(folder_name) if x[-3:] == 'jp2' and (x[:2] == "n_" or x[:2] == "m_")][0]
 
     # Open the jp2 file
     jp2_file = glymur.Jp2k(folder_name + '/' + jp2_filename)
@@ -55,25 +59,31 @@ def crop(folder_name):
     # Get the dimensions of the file
     # noinspection PyUnusedLocal
     [height, width, channels] = jp2_file.shape  # channels is unused
-    newwidth1 = int(newx1 * width)
-    newwidth2 = int(newx2 * width)
-    newheight1 = int(newy1 * height)
-    newheight2 = int(newy2 * height)
-    print(newwidth1, newwidth2, newheight1, newheight2)
+    newwidth1 = max(0, int(newx1 * width))
+    newwidth2 = min(width, int(newx2 * width))
+    newheight1 = max(0, int(newy1 * height))
+    newheight2 = min(height, int(newy2 * height))
     # In the first run, this came out to an image of 993X1009 pixels. It may be prudent to shrink this down to 950x950
     # since the net needs a consistent input shape, but we'll deal with that after trying a few more
 
     # d)
     cropped = jp2_file[newheight1:newheight2, newwidth1:newwidth2, :]
     newfile = glymur.Jp2k(folder_name + '/cropped.jp2', data=cropped)
-    print(newfile.shape)
+
+    # Lastly, check the shape against what we consider to be standard. The standard was determined after initially
+    # getting some data and seeing that most had the same shape, but some had really different ones. We'll allow 5%
+    # deviation
+    if (newfile.shape[0] < standard_height * 0.95 or newfile.shape[0] > standard_height * 1.05) or \
+        (newfile.shape[1] < standard_width * 0.95 or newfile.shape[1] > standard_width * 1.05):
+        with open(folder_name + '/failed.txt', 'w') as f:
+            f.write("Shape out of bounds")
+    else:
+        with open(folder_name + '/cropped', 'w') as f:  # This file indicates success to the pipeline processor
+            f.write('')
 
 
-print(os.getcwd())
-# noinspection PyArgumentList
-data_directories = [x for x in os.listdir() if x.isdigit()]
-data_directories.sort(key=lambda x: int(x))
-for directory in data_directories:
-    if int(directory) > 110:
-        continue
-    crop(directory)
+with open('folders_to_process.txt', 'r') as f:
+    directories = f.read().splitlines()
+os.chdir('preprocessing')
+with multiprocessing.Pool(20) as p:
+    p.map(crop, directories)

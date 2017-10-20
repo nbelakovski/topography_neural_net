@@ -3,6 +3,7 @@ import os
 import requests
 import sys
 import subprocess
+import hashlib
 from time import sleep
 
 paired_data = json.load(open('paired_data.json', 'r'))
@@ -10,10 +11,14 @@ paired_data = json.load(open('paired_data.json', 'r'))
 API_key = "39fa86f1e5454638a9d4bfc78f5e2037"
 
 # Make directories for each pair of data, and put the information for each pair into each folder
+os.makedirs('downloading', exist_ok=True)
+os.chdir('downloading')
 for i, pair_data in enumerate(paired_data):
     # noinspection PyArgumentList
-    os.makedirs(name=str(i), exist_ok=True)
-    json_filename = str(i) + '/' + str(i) + '.json'
+    hash_input = pair_data[0]['summary'] + '|' + pair_data[1]['summary']
+    dirname = hashlib.md5(bytes(hash_input.encode())).hexdigest()[:6]
+    os.makedirs(dirname, exist_ok=True)  # TODO: Need to check if this exists in preprocessing or completed
+    json_filename = dirname + '/' + dirname + '.json'
     json.dump(pair_data, open(json_filename, 'w'), indent=4)
 
 del paired_data  # clean up
@@ -23,7 +28,7 @@ del paired_data  # clean up
 # Get the API key
 def get_api_key():
     login_url = 'https://earthexplorer.usgs.gov/inventory/json/v/1.4.0/login'
-    password = open('../password.txt', 'r').readline()
+    password = open('../../password.txt', 'r').readline()
     password = password.split('\n')[0]
     data = {"username": "nbelakovski", "password": password, "authType": "EROS", "catalogId": "EE"}
     r = requests.post(login_url, data={'jsonRequest': json.dumps(data)})
@@ -38,7 +43,9 @@ def get_api_key():
 
 # find all wget process and block from returning until they're all completed
 def find_number_of_wget_processes():
-    ps = subprocess.Popen("ps -ef | grep wget | wc -l", shell=True, stdout=subprocess.PIPE)
+    # Explanation of command: list all processes | find all containing wget | eliminate the ones containing grep | count
+    # lines. The third step gets rid of the process created by the second step from the output of the third step.
+    ps = subprocess.Popen("ps -ef | grep wget | grep -v grep | wc -l", shell=True, stdout=subprocess.PIPE)
     output = ps.stdout.read()
     ps.stdout.close()
     ps.wait()
@@ -60,7 +67,8 @@ def download_data(dataset, entityid: int):
         if r.json()['errorCode'] is None:
             data_url = r.json()['data'][0]['url']
             rcode = subprocess.call((['wget', '--background', '--continue', '--progress=bar:force',
-                                      '--trust-server-names', '--content-disposition', data_url]))
+                                      '--trust-server-names', '--content-disposition',
+                                      '--output-file',str(entityid) + '.wget', data_url]))
         else:
             print("Error in downloading: ", r.json()['error'])
     else:
@@ -70,21 +78,24 @@ def download_data(dataset, entityid: int):
 
 get_api_key()
 # noinspection PyArgumentList
-data_directories = [x for x in os.listdir() if x.isdigit()]
-data_directories.sort(key=lambda x: int(x))  # list in numerical order, instead of '0', '1', '10', '11', etc.
+data_directories = os.listdir()
+# data_directories.sort(key=lambda x: int(x))  # list in numerical order, instead of '0', '1', '10', '11', etc.
 for directory in data_directories:
 
     print("Going into directory", directory)
     os.chdir(directory)
+    if os.path.exists('moved_to_preprocessing'):
+        os.chdir('..')
+        continue  # This is a signal that this data has already been downloaded
     pair_data = json.load(open(directory+'.json', 'r'))
-    lidar_rcode = download_data("LIDAR", pair_data[0]['entityId'])
-    image_rcode = download_data("NAIP_COMPRESSED", pair_data[1]['entityId'])
 
+    image_rcode = download_data("NAIP_COMPRESSED", pair_data[1]['entityId'])
     if image_rcode != 0:
         print("Error downloading image for", directory)
         with open('error.log', 'w') as f:
             f.write("Error downloading image")
 
+    lidar_rcode = download_data("LIDAR", pair_data[0]['entityId'])
     if lidar_rcode != 0:
         print("Error downloading lidar for", directory)
         with open('error.log', 'a') as f:
@@ -93,7 +104,8 @@ for directory in data_directories:
     # download lidar image
     url = pair_data[0]['browseUrl']
     lidar_image_rcode = subprocess.call(['wget', '--background', '--continue', '--progress=bar:force',
-                                         '--trust-server-names', '--content-disposition', url])
+                                         '--trust-server-names', '--content-disposition',
+                                         '--output-file', 'jpg.wget', url])
     if lidar_image_rcode != 0:
         print("Error downloading lidar image for", directory)
         with open('error.log', 'a') as f:
@@ -106,4 +118,13 @@ for directory in data_directories:
 
     del pair_data  # clean up
     os.chdir('..')
-    print("Done with dorectory", directory)
+    print("Done with directory", directory)
+
+# Once this loop is over, block until all wgets are done
+while find_number_of_wget_processes() > 0:
+    print("Waiting for some wget processes to finish before exiting")
+    sleep(3)
+
+# Note super happy with this solution, as it has some fragility in that it could hang if there are other, unrelated wget
+# processes running on the system. Unfortunately, I don't currently see a way of getting a valid handle to the wget
+# processes that are launched from this app. PIDs can be obtained, but they can be re-used, so not a valid handle.
