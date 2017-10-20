@@ -233,9 +233,17 @@ def main(_):
     config.gpu_options.allow_growth = True
 
     with tf.Session(config=config) as sess:
-        print("Initializing global variables...")
-        sess.run(tf.global_variables_initializer())
-        print("Initializing global variables...done")
+        # Try importing the model and loading the last checkpoint, if possible. Otherwise initialize from scratch
+        try:
+            print("Loading model from disk...")
+            saver.restore(sess, model_path)
+            print("Loading model from disk...done")
+        except:
+            print("Loading model from disk failed.")
+            print("Initializing global variables...")
+            sess.run(tf.global_variables_initializer())
+            print("Initializing global variables...done")
+
         for epoch in range(11000):
             print("Running epoch", epoch)
             print("Shuffling...")
