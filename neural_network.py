@@ -21,40 +21,29 @@ import sys
 import tempfile
 import glymur
 import pickle
-import numpy
-
 import tensorflow as tf
 import os
+from random import random
 from data.subsample_matrix import subsample_matrix
 
 FLAGS = None
 
-# TODO: Change directory imports to data/completed. First let's get a fuckton of data there!
-
-output_size = 28*8
-crop_size = 900
+output_size = 28*8  # Current comes from size of last input layer and 3 deconv layers with stride 2
+batch_size = 3
 
 
 def deepnn(x):
-    """deepnn builds the graph for a deep net for classifying digits.
+    """deepnn builds the graph for a deep net for determining topography from image data.
 
   Args:
-    x: an input tensor with the dimensions (N_examples, 784), where 784 is the
-    number of pixels in a standard MNIST image.
+    x: an input tensor with the dimensions (N_examples, 1008, 990), where 1008x990 is the
+    number of pixels in the input image.
 
   Returns:
-    A tuple (y, keep_prob). y is a tensor of shape (N_examples, 10), with values
-    equal to the logits of classifying the digit into one of 10 classes (the
-    digits 0-9). keep_prob is a scalar placeholder for the probability of
-    dropout.
+    A tensor y of shape (output_size, output_size), with values equal to the topography of the input image
   """
-    # Reshape to use within a convolutional neural net.
-    # Last dimension is for "features" - there is only one here, since images are
-    # grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
-    #with tf.name_scope('reshape'):
-        #x_image = tf.reshape(x, [-1, crop_size, crop_size, 3])
 
-    # First convolutional layer - maps one grayscale image to 32 feature maps.
+    # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
         w_conv1 = weight_variable([5, 5, 3, 64])
         b_conv1 = bias_variable([64])
@@ -62,7 +51,7 @@ def deepnn(x):
         h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
         tf.summary.histogram('histogram', h_conv1)
 
-    # Pooling layer - downsamples by 2X.
+    # Pooling layer - downsamples.
     with tf.name_scope('pool1'):
         h_pool1 = max_pool_3x3(h_conv1)
 
@@ -96,68 +85,48 @@ def deepnn(x):
     with tf.name_scope('pool4'):
         h_pool4 = max_pool_2x2(h_conv4)
 
+    # First deconvolution layer. Upsample the last pooling layer and halve the number of feature maps
     final_pool_dim = h_pool4.shape.dims[1].value
     with tf.name_scope('deconv1'):
         stride1 = 2
-        w_deconv1 = weight_variable([7, 7, 8, 16])
-        out_shape = [3, final_pool_dim * stride1, final_pool_dim * stride1, 8]
+        w_deconv1 = weight_variable([7, 7, 8, 16])  # height, width, out channels, in channels
+        out_shape = [batch_size, final_pool_dim * stride1, final_pool_dim * stride1, 8]
         h_deconv1 = tf.nn.relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
+    # Second deconvolutional layer
     with tf.name_scope('deconv2'):
         stride2 = 2
         w_deconv2 = weight_variable([7, 7, 4, 8])
-        out_shape = [3, final_pool_dim * stride1 * stride2, final_pool_dim * stride1 * stride2, 4]
+        out_shape = [batch_size, final_pool_dim * stride1 * stride2, final_pool_dim * stride1 * stride2, 4]
         h_deconv2 = tf.nn.relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
+    # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
         w_deconv3 = weight_variable([7, 7, 1, 4])
-        out_shape = [3, final_pool_dim * stride1 * stride2 * stride3, final_pool_dim * stride1 * stride2 * stride3, 1]
+        out_shape = [batch_size, final_pool_dim * stride1 * stride2 * stride3,
+                     final_pool_dim * stride1 * stride2 * stride3, 1]
         assert(final_pool_dim * stride1 * stride2 * stride3 == output_size)
         h_deconv3 = tf.nn.relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
-        # output = tf.constant(0.1, shape=[1, output_size, output_size, 8])
-        # expected_l = conv2d(output, w_deconv, strides=[1,7,7,1])
-    # pass
-    # Fully connected layer 1 -- some downsampling means we have a new resolution
-    # number_of_fully_connected_neurons = 1000
-    # with tf.name_scope('fc1'):
-    #     total_shape = 1
-    #     for dim in h_pool4.shape.dims:
-    #         if dim.value:
-    #             total_shape *= dim.value
-    #     w_fc1 = weight_variable([total_shape, number_of_fully_connected_neurons])
-    #     b_fc1 = bias_variable([number_of_fully_connected_neurons])
-    #
-    #     h_pool4_flat = tf.reshape(h_pool4, [-1, total_shape])
-    #     h_fc1 = tf.nn.relu(tf.matmul(h_pool4_flat, w_fc1) + b_fc1)
 
-        # Dropout - controls the complexity of the model, prevents co-adaptation of
-        # features.
-        # with tf.name_scope('dropout'):
-        #   keep_prob = tf.placeholder(tf.float32)
-        #   h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
-
-        # Map the 700x700 features to a output_sizexoutput_size feature which will be the
-        # with tf.name_scope('fc2'):
-        #   w_fc2 = weight_variable([1024, 10])
-        #   b_fc2 = bias_variable([10])
-
-        # y_conv = tf.reshape(h_fc1, [-1, output_size, output_size], name="final_op")
     with tf.name_scope('output'):
-    #     w_output = weight_variable([number_of_fully_connected_neurons, output_size * output_size])
-    #     b_output = bias_variable([output_size * output_size])
-    #     h_output = tf.nn.relu(tf.matmul(h_fc1, w_output) + b_output)
+        # For use in the loss function, and in the inference script, rearrange the last layer to remove batch size and
+        # the reference to the single channel
         y_conv = tf.reshape(h_deconv3, [-1, output_size, output_size], name="final_op")
-    return y_conv  # , keep_prob
+    return y_conv
 
 
-def deconv2d(x, w, output_shape, strides=[1, 1, 1, 1]):
+def deconv2d(x, w, output_shape, strides=None):
     """deconv2d returns a 2d deconvolution layer with full stride."""
+    if strides is None:
+        strides = [1, 1, 1, 1]
     return tf.nn.conv2d_transpose(x, w, output_shape, strides=strides, padding='SAME')
 
 
-def conv2d(x, w, strides=[1, 1, 1, 1]):
+def conv2d(x, w, strides=None):
     """conv2d returns a 2d convolution layer with full stride."""
+    if strides is None:
+        strides = [1, 1, 1, 1]
     return tf.nn.conv2d(x, w, strides=strides, padding='SAME')
 
 
@@ -210,15 +179,9 @@ def main(_):
     with tf.name_scope('loss'):
         mean_squared_e = tf.losses.mean_squared_error(labels=y_,
                                                       predictions=y_conv)
-    # mean_squared_e = tf.reduce_mean(mean_squared_e)
 
     with tf.name_scope('adam_optimizer'):
         train_step = tf.train.AdamOptimizer(1e-4).minimize(mean_squared_e)
-
-    # with tf.name_scope('accuracy'):
-    #     correct_prediction = tf.squared_difference(y_conv, y_)
-    #     # correct_prediction = tf.cast(correct_prediction, tf.float32)
-    # accuracy = tf.reduce_mean(correct_prediction)
 
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)
@@ -262,45 +225,55 @@ def main(_):
     model_directory = "tnn_model"
     model_name = "tnn"
     model_path = os.path.join(model_directory, model_name)
-    batch_size = 3
-    total_batches = int(len(training_images) / batch_size)  # if it's not a perfect multiple, we'll leave out a few images
+    total_batches = int(len(training_images) / batch_size)  # if it's not a perfect multiple, we'll leave out few images
 
     # In attempting to deal with GPU issues, I will try to get tensorflow to only allocate gpu memory as needed, instead
     # of having it allocate all the GPU memory, which is what it does by default
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
-    merged = tf.summary.merge_all()
 
     with tf.Session(config=config) as sess:
         print("Initializing global variables...")
         sess.run(tf.global_variables_initializer())
         print("Initializing global variables...done")
-        # TODO: Rearrange this into epochs and batches
-        for i in range(11000):
-            print("Creating batch...")
-            batch_section = i % total_batches
-            batch_start = batch_section*batch_size
-            batch_end = (batch_section+1)*batch_size
-            print(i, batch_start, batch_end)
-            batch = [training_images[batch_start:batch_end], training_topo[batch_start:batch_end]]
-            print("Creating batch...done")
-            if i > 0 and i % 50 == 0:
-                print("Evaluating training accuracy:")
-                train_accuracy = mean_squared_e.eval(feed_dict={
-                    x: training_images[0:3], y_: training_topo[0:3]})
-                print('step %d, training accuracy %g' % (i, train_accuracy))
-                saver.save(sess, model_path)
-            print("Running training", i, "...")
-            # train_step.run(feed_dict={x: batch[0], y_: batch[1]})
-            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            run_metadata = tf.RunMetadata()
-            summary, tmp = sess.run([merged, train_step], feed_dict={x: batch[0], y_: batch[1]}, options=run_options, run_metadata=run_metadata)
-            # run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            # run_metadata = tf.RunMetadata()
-            print("Running training", i, "...done")
-            train_writer.add_run_metadata(run_metadata, 'step %d' % i)
-            train_writer.add_summary(summary, i)
-            sys.stdout.flush()
+        for epoch in range(11000):
+            print("Running epoch", epoch)
+            print("Shuffling...")
+            # Need to keep topo correlated to the images. So, shuffle the indices, and then create new arrays
+            # based on the shuffled indices
+            index_array = [x for x in range(len(training_images))]
+            index_array.sort(key=lambda k: k * random())
+            # Now create new arrays to store the values
+            new_training_images = []
+            new_training_topo = []
+            for i in index_array:
+                new_training_images.append(training_images[i])
+                new_training_topo.append(training_topo[i])
+            # Now re-assign
+            training_images = new_training_images
+            training_topo = new_training_topo
+            # Maintenance of correlation has been verified in debug mode with spot checks
+            print("Shuffling...done")
+            for batch_number in range(total_batches):
+                print("Creating batch...")
+                batch_start = batch_number*batch_size
+                batch_end = (batch_number+1)*batch_size
+                print(epoch, batch_number, batch_start, batch_end)
+                batch = [training_images[batch_start:batch_end], training_topo[batch_start:batch_end]]
+                print("Creating batch...done")
+                print("Running training", epoch, "-", batch_number, "...")
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                sess.run([train_step], feed_dict={x: batch[0], y_: batch[1]}, options=run_options,
+                         run_metadata=run_metadata)
+                print("Running training", epoch, "-", batch_number, "...done")
+                train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
+                sys.stdout.flush()
+            print("Evaluating training accuracy after:")
+            train_accuracy = mean_squared_e.eval(feed_dict={
+                x: test_images[0:batch_size], y_: test_topo[0:batch_size]})
+            print('epoch %d, training accuracy %g' % (epoch, train_accuracy))
+            saver.save(sess, model_path)
 
         saver.save(sess, model_path)
         print('test accuracy %g' % mean_squared_e.eval(feed_dict={
