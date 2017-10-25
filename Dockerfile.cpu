@@ -19,7 +19,8 @@ ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/usr/local/lib
 WORKDIR /
 RUN rm -rf /tmp/workdir
 # Other project specific dependencies
-RUN pip3 install pybind11
+RUN pip3 install pybind11 glymur requests
+RUN apt-get install -y libopenjp2-7-dev
 # Switch to the docker user and his home directory
 USER docker
 WORKDIR /home/docker
