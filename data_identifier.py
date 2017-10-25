@@ -8,14 +8,10 @@ from math import ceil, floor
 # Some globals
 
 API_key = "436411e433824075ae241eb8abc83824"
-# west_coast_sw_lat = 35.0
-# west_coast_sw_lon = -125.0
-# west_coast_ne_lat = 49.0
-# west_coast_ne_lon = -119.0
-west_coast_sw_lat = 48
-west_coast_sw_lon = -121.4
-west_coast_ne_lat = 48.4
-west_coast_ne_lon = -120.7
+west_coast_sw_lat = 35.0
+west_coast_sw_lon = -125.0
+west_coast_ne_lat = 49.0
+west_coast_ne_lon = -119.0
 
 
 def create_lat_lon_dict(lat, lon):

@@ -23,11 +23,11 @@ def main(args):
     x = graph.get_tensor_by_name("input:0")
     op = graph.get_tensor_by_name("output/final_op:0")
 
-    jp2_filename = 'data/15/cropped.jp2'
+    jp2_filename = 'data/completed/0025f3/cropped.jp2'
     jp2_file = glymur.Jp2k(jp2_filename)
     data = jp2_file[0:1008, 0:990, :]
 
-    feed_dict1 = {x: [data, data, data]}
+    feed_dict1 = {x: [data, data, data]} # needed due to batch size of network
 
     print("Running session")
     out = sess.run(op, feed_dict=feed_dict1)

@@ -16,7 +16,7 @@ echo "Downloader PID: $DOWNLOADER_PID"
 # Every 10 minutes or so, check the directories in 'downloading'
 # If all the wget-log files in a directory contain the word 'saved', move the directory to the 'preprocessing' folder
 # and launch the preprocessing scripts. Once they're done, move the folder to the 'completed' folder
-while [ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]; do
+while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls preprocessing | wc -l ) -gt 0 ]]; do
     echo "Checking for data and performing relevant actions"
     FOLDERS=$(ls downloading)
     for folder in ${FOLDERS}; do
@@ -43,6 +43,22 @@ while [ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]; do
     CROP_PID=$!
     echo "Unzipping and removing. CROP_PID: $CROP_PID"
     python3 unzip_and_remove.py
+    # Some folders have shown issues where their ZIP does not appear to contain an LAS. Look for those folders and move them to failed
+    FOLDERS=$(ls preprocessing)
+    for FOLDER in ${FOLDERS}; do
+        LAS=0; ZIP=0
+        if ls preprocessing/$FOLDER/*las > /dev/null 2>&1; then
+            LAS=1
+        fi
+        if ls preprocessing/$FOLDER/*ZIP > /dev/null 2>&1; then
+            ZIP=1
+        fi
+        if [[ $LAS -eq 0 ]] && [[ $ZIP -eq 0 ]]; then
+             echo "issues with ZIP/LAS" >> preprocessing/$FOLDER/ziplas_issues.txt
+             mv preprocessing/$FOLDER failed/
+	     sleep 1
+        fi
+    done
     echo "Waiting on cropping"
     wait ${CROP_PID}
     echo "Converting LAS to matrix"

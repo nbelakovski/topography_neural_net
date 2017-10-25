@@ -1,4 +1,9 @@
 password.txt
+*.log
+*.txt
+*.json
+__pycache__
+folders_to_process.txt
 temp-plot.html
 paired_data.json
 .DS_Store

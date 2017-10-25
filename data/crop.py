@@ -57,8 +57,7 @@ def crop(folder_name):
     jp2_file = glymur.Jp2k(folder_name + '/' + jp2_filename)
 
     # Get the dimensions of the file
-    # noinspection PyUnusedLocal
-    [height, width, channels] = jp2_file.shape  # channels is unused
+    [height, width, channels] = jp2_file.shape
     newwidth1 = max(0, int(newx1 * width))
     newwidth2 = min(width, int(newx2 * width))
     newheight1 = max(0, int(newy1 * height))
@@ -73,10 +72,14 @@ def crop(folder_name):
     # Lastly, check the shape against what we consider to be standard. The standard was determined after initially
     # getting some data and seeing that most had the same shape, but some had really different ones. We'll allow 5%
     # deviation
-    if (newfile.shape[0] < standard_height * 0.95 or newfile.shape[0] > standard_height * 1.05) or \
-        (newfile.shape[1] < standard_width * 0.95 or newfile.shape[1] > standard_width * 1.05):
+    height_oob = (newfile.shape[0] < (standard_height * 0.95)) or (newfile.shape[0] > (standard_height * 1.05))
+    width_oob = (newfile.shape[1] < (standard_width * 0.95)) or (newfile.shape[1] > (standard_width * 1.05))
+    channels_oob = (newfile.shape[2] != 3)  # There was actually one image with 4 channels
+    print(folder_name, newfile.shape, height_oob, width_oob, channels_oob)
+    if height_oob or width_oob or channels_oob:
         with open(folder_name + '/failed.txt', 'w') as f:
-            f.write("Shape out of bounds")
+            mystr = "Shape out of bounds, %d %d %d\n" % tuple(newfile.shape)
+            f.write(mystr)
     else:
         with open(folder_name + '/cropped', 'w') as f:  # This file indicates success to the pipeline processor
             f.write('')

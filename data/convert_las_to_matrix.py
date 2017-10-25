@@ -60,12 +60,16 @@ def count_zeros(matrix):
 
 def convert(folder_name):
     os.chdir(folder_name)
-    las_filename = [x for x in os.listdir() if x[-3:] == 'las'][0]
     if os.path.exists('failed.txt'):
-        os.remove(las_filename)
+        try:
+            las_filename = [x for x in os.listdir() if x[-3:] == 'las'][0]
+            os.remove(las_filename)
+        except:
+            pass
         os.chdir('..')
         return
 
+    las_filename = [x for x in os.listdir() if x[-3:] == 'las'][0]
     print(las_filename)
     f = laspy.file.File(las_filename)
     # so now we have f.X, f.Y, and f.Z, which should all be the same size. We need to make a matrix

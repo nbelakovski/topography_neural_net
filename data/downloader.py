@@ -81,6 +81,16 @@ get_api_key()
 data_directories = os.listdir()
 # data_directories.sort(key=lambda x: int(x))  # list in numerical order, instead of '0', '1', '10', '11', etc.
 for directory in data_directories:
+    # Ensure that the filesystem has at least a couple dozen GBs of free space left, otherwise, wait.
+    # As the preprocessing module runs, space should become free
+    while True:
+        filesystem_stats = os.statvfs('.')
+        free_gbs = filesystem_stats.f_frsize * filesystem_stats.f_bfree / 1024 / 1024 / 1024
+        if free_gbs > 30:
+            break
+        else:
+            print("Waiting for space to free up, only seeing", free_gbs, "GB free")
+            sleep(3)
 
     print("Going into directory", directory)
     os.chdir(directory)
@@ -128,3 +138,4 @@ while find_number_of_wget_processes() > 0:
 # Note super happy with this solution, as it has some fragility in that it could hang if there are other, unrelated wget
 # processes running on the system. Unfortunately, I don't currently see a way of getting a valid handle to the wget
 # processes that are launched from this app. PIDs can be obtained, but they can be re-used, so not a valid handle.
+
