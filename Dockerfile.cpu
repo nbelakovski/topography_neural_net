@@ -21,6 +21,11 @@ RUN rm -rf /tmp/workdir
 # Other project specific dependencies
 RUN pip3 install pybind11 glymur requests
 RUN apt-get install -y libopenjp2-7-dev
+# For some reason the following packages/env variables are necessary for vim to work properly. Without them it permanently hangs the terminal you're in (docker instance can still be connected to from other terminals though)
+RUN apt-get install -y language-pack-en-base locales
+ENV LANGUAGE=en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 # Switch to the docker user and his home directory
 USER docker
 WORKDIR /home/docker
