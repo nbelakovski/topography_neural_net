@@ -4,8 +4,6 @@ import os
 import sys
 import glymur
 
-standard_height = 1008
-standard_width = 990
 
 def crop(folder_name):
     os.chdir(folder_name)
@@ -74,17 +72,14 @@ def crop(folder_name):
     # Lastly, check the shape against what we consider to be standard. The standard was determined after initially
     # getting some data and seeing that most had the same shape, but some had really different ones. We'll allow 5%
     # deviation
-    height_oob = (newfile.shape[0] < (standard_height * 0.95)) or (newfile.shape[0] > (standard_height * 1.05))
-    width_oob = (newfile.shape[1] < (standard_width * 0.95)) or (newfile.shape[1] > (standard_width * 1.05))
-    channels_oob = (newfile.shape[2] != 3)  # There was actually one image with 4 channels
-    print(folder_name, newfile.shape, height_oob, width_oob, channels_oob)
-    if height_oob or width_oob or channels_oob:
+    channels_outofbounds = (newfile.shape[2] != 3)  # There was actually one image with 4 channels
+    if channels_outofbounds:
         with open('failed.txt', 'w') as f:
             mystr = "Shape out of bounds, %d %d %d\n" % tuple(newfile.shape)
             f.write(mystr)
     else:
         with open('cropped', 'w') as f:  # This file indicates success to the pipeline processor
-            f.write('')
+            f.write('%d,%d,%d' % tuple(newfile.shape))
 
 
 with open(sys.argv[1], 'r') as f:

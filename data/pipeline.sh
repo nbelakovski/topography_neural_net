@@ -1,5 +1,11 @@
 #!/bin/bash -xe
 
+NUMARGS=$#
+if [[ $NUMARGS -ne 1 ]]; then
+    echo "Usage: ./pipeline.sh DATA_DIRECTORY"
+    exit
+fi
+
 trap 'kill $(jobs -p)' EXIT
 
 CWD=$(pwd)
@@ -53,9 +59,7 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
     echo "Unzipping and removing. CROP_PID: $CROP_PID"
     python3 unzip_and_remove.py folders_to_process.txt
     # Some folders have shown issues where their ZIP does not appear to contain an LAS. Look for those folders and move them to failed
-    # Also note which folder are successful, so that the new list can be passed to convert_last_to_matrix.py. To do this, we'll first
-    # clear the contents of folders_to_process.txt
-    rm folders_to_process.txt
+    # Also note which folder are successful, so that the new list can be passed to convert_last_to_matrix.py.
     FOLDERS=$(ls $DATA_DIR/preprocessing)
     for FOLDER in ${FOLDERS}; do
         LAS=0; ZIP=0
@@ -69,17 +73,18 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
              echo "issues with ZIP/LAS" >> $DATA_DIR/preprocessing/$FOLDER/ziplas_issues.txt
              mv $DATA_DIR/preprocessing/$FOLDER $DATA_DIR/failed/
         else
-             echo $DATA_DIR/preprocessing/$FOLDER >> folders_to_process.txt
+             echo $DATA_DIR/preprocessing/$FOLDER >> remaining_folders_to_process.txt
         fi
     done
     echo "Waiting on cropping"
     wait ${CROP_PID}
     echo "Converting LAS to matrix"
-    if [[ -e folders_to_process.txt ]] ; then
-        python3 convert_las_to_matrix.py folders_to_process.txt
+    if [[ -e remaining_folders_to_process.txt ]] ; then
+        python3 convert_las_to_matrix.py remaining_folders_to_process.txt
         echo "Preprocessing done"
-        rm folders_to_process.txt
+        rm remaining_folders_to_process.txt
     fi
+    rm folders_to_process.txt
     FOLDERS=$(ls $DATA_DIR/preprocessing)
     # And now that preprocessing is done, move all these files to the completed folder
     for folder in ${FOLDERS}; do
