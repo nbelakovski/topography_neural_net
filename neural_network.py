@@ -13,10 +13,11 @@
 # limitations under the License.
 # ==============================================================================
 
-"""A deep classifier using convolutional layers.
+"""A deep regressor using convolutional layers.
 """
 
 import argparse
+import numpy
 import sys
 import tempfile
 import glymur
@@ -154,11 +155,12 @@ def bias_variable(shape):
     return tf.Variable(initial)
 
 
-def import_topo_files(directories):
+def import_data_files(directories):
     topography_data = []
     for i, directory in enumerate(directories):
-        topo_filename = [x for x in os.listdir(os.path.join('data', 'completed', directory)) if x[-5:] == '.data'][0]
-        data = read_data(topo_filename)
+        topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, 'completed', directory)) if x[-5:] == '.data'][0]
+        data = read_data(os.path.join(FLAGS.data_dir,'completed', directory, topo_filename))
+        data = numpy.matrix(data)
         topography_data.append(subsample_matrix(data, output_size))
         del data
         if i % 25 == 0:
@@ -189,11 +191,11 @@ def main(_):
     train_writer.add_graph(tf.get_default_graph())
 
     print("Loading jp2 files...")
-    data_directories = os.listdir('data/completed')
+    data_directories = os.listdir(FLAGS.data_dir + '/completed')
     images = []
     directories_used = []
     for directory in data_directories:
-        jp2_filename = os.path.join('data/completed', directory, 'cropped.jp2')
+        jp2_filename = os.path.join(FLAGS.data_dir + '/completed', directory, 'cropped.jp2')
         if not os.path.exists(jp2_filename):
             continue
         jp2_file = glymur.Jp2k(jp2_filename)
@@ -291,7 +293,7 @@ def main(_):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str,
-                        default='/tmp/tensorflow/mnist/input_data',
-                        help='Directory for storing input data')
+                        default='/home/docker/data',
+                        help='Directory for input data')
     FLAGS, unparsed = parser.parse_known_args()
     tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
