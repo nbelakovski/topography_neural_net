@@ -4,14 +4,19 @@ import json
 import requests
 import sys
 from math import ceil, floor
+import sys
 
 # Some globals
 
 API_key = "436411e433824075ae241eb8abc83824"
-west_coast_sw_lat = 35.0
-west_coast_sw_lon = -125.0
-west_coast_ne_lat = 49.0
-west_coast_ne_lon = -119.0
+# west_coast_sw_lat = 35.0
+# west_coast_sw_lon = -125.0
+# west_coast_ne_lat = 49.0
+# west_coast_ne_lon = -119.0
+west_coast_sw_lat = 48		
+west_coast_sw_lon = -121.4		
+west_coast_ne_lat = 48.4		
+west_coast_ne_lon = -120.7
 
 
 def create_lat_lon_dict(lat, lon):
@@ -147,5 +152,5 @@ print("Getting image data")
 print("=================")
 paired_data_to_download = get_image_data(topo_data)
 
-with open('data/paired_data.json', 'w') as f:
+with open(sys.argv[1] + '/paired_data.json', 'w') as f:
     json.dump(paired_data_to_download, f, indent=4)

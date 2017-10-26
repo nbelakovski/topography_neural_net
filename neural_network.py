@@ -20,11 +20,11 @@ import argparse
 import sys
 import tempfile
 import glymur
-import pickle
 import tensorflow as tf
 import os
 from random import random
 from data.subsample_matrix import subsample_matrix
+from read_data import read_data
 
 FLAGS = None
 
@@ -154,15 +154,15 @@ def bias_variable(shape):
     return tf.Variable(initial)
 
 
-def import_pickle_files(directories):
+def import_topo_files(directories):
     topography_data = []
     for i, directory in enumerate(directories):
-        pickle_filename = [x for x in os.listdir(os.path.join('data', 'completed', directory)) if x[-6:] == 'pickle'][0]
-        data = pickle.load(open(os.path.join('data', 'completed', directory, pickle_filename), 'rb'))
+        topo_filename = [x for x in os.listdir(os.path.join('data', 'completed', directory)) if x[-5:] == '.data'][0]
+        data = read_data(topo_filename)
         topography_data.append(subsample_matrix(data, output_size))
         del data
         if i % 25 == 0:
-            print("Processed", i, "pickle files")
+            print("Processed", i, "data files")
     return topography_data
 
 
@@ -208,9 +208,9 @@ def main(_):
     print("Loading jp2 files...done. Got", len(directories_used), "images")
     sys.stdout.flush()
 
-    print("Loading pickle files...")
-    subsampled_topography = import_pickle_files(directories_used)
-    print("Loading pickle files...done")
+    print("Loading data files...")
+    subsampled_topography = import_data_files(directories_used)
+    print("Loading data files...done")
 
     # Now we should split the data into training/test set
     total_data = len(directories_used)

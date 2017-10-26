@@ -4,14 +4,16 @@ import requests
 import sys
 import subprocess
 import hashlib
+import sys
 from time import sleep
 
+DATA_DIR=sys.argv[1]
+os.chdir(DATA_DIR)
 paired_data = json.load(open('paired_data.json', 'r'))
 
 API_key = "39fa86f1e5454638a9d4bfc78f5e2037"
 
 # Make directories for each pair of data, and put the information for each pair into each folder
-os.makedirs('downloading', exist_ok=True)
 os.chdir('downloading')
 for i, pair_data in enumerate(paired_data):
     # noinspection PyArgumentList
@@ -21,6 +23,7 @@ for i, pair_data in enumerate(paired_data):
     json_filename = dirname + '/' + dirname + '.json'
     json.dump(pair_data, open(json_filename, 'w'), indent=4)
 
+os.chdir('..')
 del paired_data  # clean up
 
 
@@ -28,7 +31,8 @@ del paired_data  # clean up
 # Get the API key
 def get_api_key():
     login_url = 'https://earthexplorer.usgs.gov/inventory/json/v/1.4.0/login'
-    password = open('../../password.txt', 'r').readline()
+    print(os.getcwd())
+    password = open('password.txt', 'r').readline()
     password = password.split('\n')[0]
     data = {"username": "nbelakovski", "password": password, "authType": "EROS", "catalogId": "EE"}
     r = requests.post(login_url, data={'jsonRequest': json.dumps(data)})
@@ -77,9 +81,7 @@ def download_data(dataset, entityid: int):
 
 
 get_api_key()
-# noinspection PyArgumentList
-data_directories = os.listdir()
-# data_directories.sort(key=lambda x: int(x))  # list in numerical order, instead of '0', '1', '10', '11', etc.
+data_directories = os.listdir('downloading')
 for directory in data_directories:
     # Ensure that the filesystem has at least a couple dozen GBs of free space left, otherwise, wait.
     # As the preprocessing module runs, space should become free
@@ -93,9 +95,8 @@ for directory in data_directories:
             sleep(3)
 
     print("Going into directory", directory)
-    os.chdir(directory)
+    os.chdir(DATA_DIR + "/downloading/" + directory)
     if os.path.exists('moved_to_preprocessing'):
-        os.chdir('..')
         continue  # This is a signal that this data has already been downloaded
     pair_data = json.load(open(directory+'.json', 'r'))
 
@@ -127,7 +128,6 @@ for directory in data_directories:
         sleep(3)
 
     del pair_data  # clean up
-    os.chdir('..')
     print("Done with directory", directory)
 
 # Once this loop is over, block until all wgets are done

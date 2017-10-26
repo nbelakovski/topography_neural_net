@@ -1,15 +1,17 @@
 import multiprocessing
 import json
 import os
-
+import sys
 import glymur
 
 standard_height = 1008
 standard_width = 990
 
 def crop(folder_name):
-    if os.path.exists(os.path.join(folder_name, 'cropped.jp2')):
+    os.chdir(folder_name)
+    if os.path.exists('cropped.jp2'):
         return
+    data_hash = folder_name.split('/')[-1]
     # Step 1 - Cropping
     # Method:
     # Overview: Get the geo coordinates of the data from the JSON, use those to figure out where, in pixels the lidar
@@ -27,7 +29,7 @@ def crop(folder_name):
 
     # a)
 
-    json_filename = folder_name + '/' + folder_name + '.json'
+    json_filename = data_hash + '.json'
     data = json.load(open(json_filename))
     lidar_points = [float(x) for x in data[0]['sceneBounds'].split(',')]
     image_points = [float(x) for x in data[1]['sceneBounds'].split(',')]
@@ -54,7 +56,7 @@ def crop(folder_name):
     jp2_filename = [x for x in os.listdir(folder_name) if x[-3:] == 'jp2' and (x[:2] == "n_" or x[:2] == "m_")][0]
 
     # Open the jp2 file
-    jp2_file = glymur.Jp2k(folder_name + '/' + jp2_filename)
+    jp2_file = glymur.Jp2k(jp2_filename)
 
     # Get the dimensions of the file
     [height, width, channels] = jp2_file.shape
@@ -67,7 +69,7 @@ def crop(folder_name):
 
     # d)
     cropped = jp2_file[newheight1:newheight2, newwidth1:newwidth2, :]
-    newfile = glymur.Jp2k(folder_name + '/cropped.jp2', data=cropped)
+    newfile = glymur.Jp2k('cropped.jp2', data=cropped)
 
     # Lastly, check the shape against what we consider to be standard. The standard was determined after initially
     # getting some data and seeing that most had the same shape, but some had really different ones. We'll allow 5%
@@ -77,16 +79,15 @@ def crop(folder_name):
     channels_oob = (newfile.shape[2] != 3)  # There was actually one image with 4 channels
     print(folder_name, newfile.shape, height_oob, width_oob, channels_oob)
     if height_oob or width_oob or channels_oob:
-        with open(folder_name + '/failed.txt', 'w') as f:
+        with open('failed.txt', 'w') as f:
             mystr = "Shape out of bounds, %d %d %d\n" % tuple(newfile.shape)
             f.write(mystr)
     else:
-        with open(folder_name + '/cropped', 'w') as f:  # This file indicates success to the pipeline processor
+        with open('cropped', 'w') as f:  # This file indicates success to the pipeline processor
             f.write('')
 
 
-with open('folders_to_process.txt', 'r') as f:
+with open(sys.argv[1], 'r') as f:
     directories = f.read().splitlines()
-os.chdir('preprocessing')
 with multiprocessing.Pool(20) as p:
     p.map(crop, directories)
