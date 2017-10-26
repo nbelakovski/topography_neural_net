@@ -60,7 +60,7 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
     python3 unzip_and_remove.py folders_to_process.txt
     # Some folders have shown issues where their ZIP does not appear to contain an LAS. Look for those folders and move them to failed
     # Also note which folder are successful, so that the new list can be passed to convert_last_to_matrix.py.
-    FOLDERS=$(ls $DATA_DIR/preprocessing)
+    FOLDERS=$(cat folders_to_process.txt | awk -F'/' '{print $6}')
     for FOLDER in ${FOLDERS}; do
         LAS=0; ZIP=0
         if ls $DATA_DIR/preprocessing/$FOLDER/*las > /dev/null 2>&1; then
