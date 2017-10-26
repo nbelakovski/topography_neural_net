@@ -19,7 +19,7 @@ def convert(folder_name):
 
     out_filename = las_filename.split('.')[0] + '.data'
     desired_matrix_size = 500
-    success = convert_las_to_matrix_and_store(las_filename, desired_matrix_size, out_filename)
+    success = convert_las_to_matrix_and_store(las_filename, desired_matrix_size, desired_matrix_size, out_filename)
     os.remove(las_filename)
     if success:
         with open('pickled', 'w') as f:

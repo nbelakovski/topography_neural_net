@@ -1,7 +1,6 @@
 // Always include the corresponding header as the first substantive line of code in the source file
 #include "convert_las_to_matrix.hpp"
 // Project headers
-#include "subsample_matrix.hpp"
 // Third party headers
 #include <liblas/liblas.hpp>
 // C/C++ STL headers
@@ -15,14 +14,14 @@ using namespace std;
 namespace converter
 {
 
-bool convert_las_to_matrix_and_store(const std::string & las_filename, const uint32_t desired_matrix_size, const std::string & out_filename)
+bool convert_las_to_matrix_and_store(const std::string & las_filename, const uint32_t desired_rows, const uint32_t desired_cols, const std::string & out_filename)
 {
-    int32_t ** matrix_ptr = convert_las_to_matrix(las_filename, desired_matrix_size);
+    int32_t ** matrix_ptr = convert_las_to_matrix(las_filename, desired_rows, desired_cols);
     if (matrix_ptr)
     {
-        write_matrix_to_file(out_filename, matrix_ptr, desired_matrix_size);
+        write_matrix_to_file(out_filename, matrix_ptr, desired_rows, desired_cols);
         // Now deallocate the memory
-        for (uint32_t i = 0; i < desired_matrix_size; ++i)
+        for (uint32_t i = 0; i < desired_rows; ++i)
         {
             delete[] matrix_ptr[i];
         }
@@ -35,7 +34,7 @@ bool convert_las_to_matrix_and_store(const std::string & las_filename, const uin
     }
 }
 
-int32_t ** convert_las_to_matrix(const string & las_filename, const uint32_t desired_matrix_size)
+int32_t ** convert_las_to_matrix(const string & las_filename, const uint32_t desired_rows, const uint32_t desired_cols)
 {
 
     // Load the LAS file
@@ -48,18 +47,17 @@ int32_t ** convert_las_to_matrix(const string & las_filename, const uint32_t des
     const liblas::Header h = r.GetHeader();
     const uint32_t total_points = h.GetPointRecordsCount();
 
-    // Allocate the largest square matrix possible given the record count of the file
-    const uint32_t matrix_size = sqrt(total_points);
-    if (matrix_size < desired_matrix_size)
+    // Allocate the matrix based on the specs
+    if (total_points< (desired_rows * desired_cols))
     {
         cerr << "Not enough points for desired matrix size. Trash" << endl;
         return NULL;
     }
-    int32_t ** matrix = new int32_t*[matrix_size];
-    for (uint32_t i = 0; i < matrix_size; ++i)
+    int32_t ** matrix = new int32_t*[desired_rows];
+    for (uint32_t i = 0; i < desired_rows; ++i)
     {
-        matrix[i] = new int32_t[matrix_size];
-        memset(matrix[i], 0, sizeof(int32_t) * matrix_size);
+        matrix[i] = new int32_t[desired_cols];
+        memset(matrix[i], 0, sizeof(int32_t) * desired_cols);
     }
 
     // populate the matrix
@@ -80,34 +78,25 @@ int32_t ** convert_las_to_matrix(const string & las_filename, const uint32_t des
     {
         liblas::Point p = r.GetPoint();
         int x = p.GetRawX();
-        int col = float(x - xmin) / dx * (matrix_size - 1);
+        int col = float(x - xmin) / dx * (desired_cols - 1);
         int y = p.GetRawY();
-        int row = float(y - ymin) / dy * (matrix_size - 1);
+        int row = float(y - ymin) / dy * (desired_rows - 1);
         matrix[row][col] = p.GetRawZ();
     }
 
-    // subsample the matrix to the desired size
-    int32_t ** subsampled_matrix = matrix_ops::subsample_matrix(matrix, matrix_size, desired_matrix_size);
-
-    // deallocate the memory
-    for (uint32_t i = 0; i < matrix_size; ++i)
-    {
-        delete[] matrix[i];
-    }
-    delete[] matrix;
-
-    return subsampled_matrix;
+    return matrix;
 }
 
-void write_matrix_to_file(const string & out_filename, const int32_t * const * matrix, const uint32_t matrix_size)
+void write_matrix_to_file(const string & out_filename, const int32_t * const * matrix, const uint32_t rows, const uint32_t cols)
 {
     ofstream out_file;
     out_file.open(out_filename.c_str(), ios::out | ios::binary);
     // Write the matrix size to the first byte
-    out_file.write(reinterpret_cast<const char *>(&matrix_size), sizeof(int));
-    for (uint32_t i = 0; i < matrix_size; ++i)
+    out_file.write(reinterpret_cast<const char *>(&rows), sizeof(int));
+    out_file.write(reinterpret_cast<const char *>(&cols), sizeof(int));
+    for (uint32_t i = 0; i < rows; ++i)
     {
-        out_file.write(reinterpret_cast<const char *>(matrix[i]), matrix_size * sizeof(int32_t));
+        out_file.write(reinterpret_cast<const char *>(matrix[i]), cols * sizeof(int32_t));
     }
 }
 } // close namespace converter
