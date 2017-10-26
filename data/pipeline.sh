@@ -42,18 +42,20 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
     # List out 20 directories in the pre-processing folder and put them into a file which will be read by the python
     # files. The point of this is to make sure we only process 20 files at a time, to limit RAM and disk usage
     find $DATA_DIR/preprocessing -maxdepth 1 -mindepth 1 -type d | head -20 > folders_to_process.txt
+    if [[ $(wc -l folders_to_process.txt | cut -d' ' -f 1) -lt 2 ]]; then
+         echo "Nothing to process, continuing"
+         sleep 10
+         continue
+    fi
     echo "Starting cropping"
     python3 crop.py folders_to_process.txt &
     CROP_PID=$!
     echo "Unzipping and removing. CROP_PID: $CROP_PID"
     python3 unzip_and_remove.py folders_to_process.txt
-    echo "Converting LAS to matrix"
-    python3 convert_las_to_matrix.py folders_to_process.txt
-    echo "Waiting on cropping"
-    wait ${CROP_PID}
-    echo "Preprocessing done"
-    rm folders_to_process.txt
     # Some folders have shown issues where their ZIP does not appear to contain an LAS. Look for those folders and move them to failed
+    # Also note which folder are successful, so that the new list can be passed to convert_last_to_matrix.py. To do this, we'll first
+    # clear the contents of folders_to_process.txt
+    rm folders_to_process.txt
     FOLDERS=$(ls $DATA_DIR/preprocessing)
     for FOLDER in ${FOLDERS}; do
         LAS=0; ZIP=0
@@ -66,9 +68,18 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
         if [[ $LAS -eq 0 ]] && [[ $ZIP -eq 0 ]]; then
              echo "issues with ZIP/LAS" >> $DATA_DIR/preprocessing/$FOLDER/ziplas_issues.txt
              mv $DATA_DIR/preprocessing/$FOLDER $DATA_DIR/failed/
-	     sleep 1
+        else
+             echo $DATA_DIR/preprocessing/$FOLDER >> folders_to_process.txt
         fi
     done
+    echo "Waiting on cropping"
+    wait ${CROP_PID}
+    echo "Converting LAS to matrix"
+    if [[ -e folders_to_process.txt ]] ; then
+        python3 convert_las_to_matrix.py folders_to_process.txt
+        echo "Preprocessing done"
+        rm folders_to_process.txt
+    fi
     FOLDERS=$(ls $DATA_DIR/preprocessing)
     # And now that preprocessing is done, move all these files to the completed folder
     for folder in ${FOLDERS}; do
