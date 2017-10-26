@@ -1,8 +1,10 @@
-FROM nvidia/cuda:8.0-cudnn6-runtime
+FROM nvidia/cuda:8.0-cudnn6-devel
+# Update the library path so that cupti can be found (for tensorflow logging stuff)
+ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/usr/local/cuda-8.0/extras/CUPTI/lib64/
 # Install basic utilities
-RUN apt-get update && apt-get install -y sudo cmake git python3 python3-pip python3-dev wget libcupti-dev vim && pip3 install --upgrade pip
+RUN apt-get update && apt-get install -y sudo cmake git python3 python3-pip python3-dev wget vim && pip3 install --upgrade pip
 # Install tensorflow related things. Change this line for use with another machine learning framework
-RUN apt-get install -y libcupti-dev && pip3 install tensorflow
+RUN pip3 install tensorflow
 # Create a docker user, give him the password docker, and add him to the sudoers group
 RUN useradd -ms /bin/bash docker
 RUN echo "docker:docker" | chpasswd
