@@ -25,7 +25,7 @@ import tensorflow as tf
 import os
 from random import random
 from data.subsample_matrix import subsample_matrix
-from read_data import read_data
+from data.utils import read_data
 
 FLAGS = None
 
@@ -160,7 +160,6 @@ def import_data_files(directories):
     for i, directory in enumerate(directories):
         topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, 'completed', directory)) if x[-5:] == '.data'][0]
         data = read_data(os.path.join(FLAGS.data_dir,'completed', directory, topo_filename))
-        data = numpy.matrix(data)
         topography_data.append(subsample_matrix(data, output_size))
         del data
         if i % 25 == 0:
