@@ -27,7 +27,7 @@ from random import random
 from data.subsample_matrix import subsample_matrix
 from data.utils import read_data
 import threading
-from queue import Queue
+from multiprocessing import Queue, Process
 from random import random
 
 FLAGS = None
@@ -36,7 +36,6 @@ input_size = 700
 batch_size = 3
 # Set up a Queue for asynchronously loading the data
 training_data_queue = Queue(1000)
-test_data_queue = Queue(batch_size)
 
 
 def deepnn(x):
@@ -181,13 +180,13 @@ def import_data_files(directories):
     return topography_data
 
 
-def enqueue(directories, target_queue):
+def enqueue(directories):
     for d in directories:
         # load the jp2 file
         jp2_filename = os.path.join(FLAGS.data_dir, 'completed', d, 'cropped.jp2')
         jp2_file = glymur.Jp2k(jp2_filename)[0:input_size, 0:input_size, :]
         data_file = import_data_file(d)
-        target_queue.put({'image':jp2_file, 'topography': data_file}, block=True)
+        training_data_queue.put({'image':jp2_file, 'topography': data_file}, block=True)
 
 
 def main(_):
@@ -224,16 +223,23 @@ def main(_):
     total_data = len(data_directories)
     split = 0.9
     training_data_total = int(split * total_data)
-    # also want to ensure that the total data is evenly divisible by number of batches
-    training_data_total -= training_data_total % batch_size
+    # also want to ensure that the total data is evenly divisible by number of batches and processes
+    num_processes = 4  # number of processes used to populate the queue
+    training_data_total -= training_data_total % (batch_size * num_processes)
     print(training_data_total)
 
     training_directories = data_directories[0:training_data_total]
-    # test_directories = data_directories[training_data_total:]
 
-    training_data_thread = threading.Thread(target=enqueue, args=[training_directories, training_data_queue])
-    # test_data_thread = threading.Thread(target=enqueue, args=[test_directories[:batch_size], test_data_queue])
-    training_data_thread.start()
+    # training_data_thread = threading.Thread(target=enqueue, args=[training_directories, training_data_queue])
+    # training_data_thread.start()
+
+    chunk_size = int(len(training_directories) / num_processes)
+    args = [[training_directories[i:i+chunk_size]] for i in range(0, len(training_directories), chunk_size)]
+    processes = []
+    for arg in args:
+        p = Process(target=enqueue, args=arg)
+        p.start()
+        processes.append(p)
 
     # grab batch_size items out of the queue to have them for the periodic accuracy evaluation
     evaluation_batch = {'images': [], 'topographies': []}
@@ -241,49 +247,17 @@ def main(_):
         evaluation_data = training_data_queue.get()
         evaluation_batch['images'].append(evaluation_data['image'])
         evaluation_batch['topographies'].append(evaluation_data['topography'])
-    # test_data_thread.start()
-    min_elements = 150
-    print("Waiting for", min_elements, "to get into queue")
-    while training_data_queue.qsize() < min_elements:
-        pass
-    # print("Loading jp2 files...")
-    # images = []
-    # directories_used = []
-    # for directory in data_directories:
-    #     jp2_filename = os.path.join(FLAGS.data_dir + '/completed', directory, 'cropped.jp2')
-    #     if not os.path.exists(jp2_filename):
-    #         continue
-    #     jp2_file = glymur.Jp2k(jp2_filename)
-    #     image_height = jp2_file.shape[0]
-    #     image_width = jp2_file.shape[1]
-    #     if image_height < 700 or image_width < 700:
-    #         continue
-    #     images.append(jp2_file[0:700, 0:700, :])
-    #     directories_used.append(directory)
-    #     # if len(images) > 150:
-    #     #     break
-    # print("Loading jp2 files...done. Got", len(directories_used), "images")
-    # sys.stdout.flush()
-    #
-    # print("Loading data files...")
-    # subsampled_topography = import_data_files(directories_used)
-    # print("Loading data files...done")
 
 
-    # Now we should split the data into training/test set
 
-    # training_images = images[:training_data_total]
-    # test_images = images[training_data_total:]
-    # training_topo = subsampled_topography[:training_data_total]
-    # test_topo = subsampled_topography[training_data_total:]
-
+    # Set up the code to save the network and its parameters
     saver = tf.train.Saver()
     model_directory = "tnn_model"
     model_name = "tnn"
     model_path = os.path.join(model_directory, model_name)
     backup_directory = "backup"
     backup_path = os.path.join(backup_directory, model_name)  # save to two location, read from one
-    # total_batches = int(len(training_images) / batch_size)  # if it's not a perfect multiple, we'll leave out few images
+    print("asdf")
 
     # In attempting to deal with GPU issues, I will try to get tensorflow to only allocate gpu memory as needed, instead
     # of having it allocate all the GPU memory, which is what it does by default
@@ -304,33 +278,11 @@ def main(_):
 
         for epoch in range(11000):
             print("Running epoch", epoch)
-            # print("Shuffling...")
-            # Need to keep topo correlated to the images. So, shuffle the indices, and then create new arrays
-            # based on the shuffled indices
-            # index_array = [x for x in range(len(training_images))]
-            # index_array.sort(key=lambda k: k * random())
-            # # Now create new arrays to store the values
-            # new_training_images = []
-            # new_training_topo = []
-            # for i in index_array:
-            #     new_training_images.append(training_images[i])
-            #     new_training_topo.append(training_topo[i])
-            # # Now re-assign
-            # training_images = new_training_images
-            # training_topo = new_training_topo
-            # Maintenance of correlation has been verified in debug mode with spot checks
-            # print("Shuffling...done")
-            # for batch_number in range(total_batches):
             # Run training through the entire data set. Reaching the end of the dataset will be indicated by the thread
             # stopping and the queue getting emptied
             batch_number = 0
-            while training_data_thread.is_alive() or training_data_queue.empty() == False:
+            while (True in [p.is_alive() for p in processes]) or training_data_queue.empty() == False:
                 print("Creating batch... (queue size is", training_data_queue.qsize(),")")
-                # batch_start = batch_number*batch_size
-                # batch_end = (batch_number+1)*batch_size
-
-                # print(epoch, batch_number, batch_start, batch_end)
-                # batch = [training_images[batch_start:batch_end], training_topo[batch_start:batch_end]]
                 training_batch = {'images': [], 'topographies': []}
                 for i in range(batch_size):
                     training_data = training_data_queue.get()
@@ -346,10 +298,18 @@ def main(_):
                 train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
                 sys.stdout.flush()
                 batch_number += 1
+            for p in processes:
+                p.terminate()
+                processes.remove(p)
             # Now shuffle training directories and restart the thread
             training_directories.sort(key= lambda x: random())  # x is unused
-            training_data_thread = threading.Thread(target=enqueue, args=[training_directories, training_data_queue])
-            training_data_thread.start()
+            args = [[training_directories[i:i + chunk_size]] for i in range(0, len(training_directories), chunk_size)]
+            for arg in args:
+                p = Process(target=enqueue, args=arg)
+                p.start()
+                processes.append(p)
+            # training_data_thread = threading.Thread(target=enqueue, args=[training_directories, training_data_queue])
+            # training_data_thread.start()
             print("Evaluating training accuracy after:")
             train_accuracy = mean_squared_e.eval(feed_dict={
                 x: evaluation_batch['images'], y_: evaluation_batch['topographies']})
