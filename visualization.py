@@ -3,7 +3,7 @@ import os
 import plotly.offline as po
 import plotly.tools as pt
 import plotly.graph_objs as go
-import pickle
+import numpy
 from data.subsample_matrix import subsample_matrix
 import sys
 from data.utils import read_data
@@ -23,15 +23,17 @@ print(data_filename)
 z_data = read_data(data_dir + '/completed/' + item_dir + '/' + data_filename)
 
 # Crop it down, to test how to crop
-z_data = z_data[-500:, 0:500]
+z_data = numpy.flipud(z_data)
+z_data = z_data[0:900, 0:100]
+# z_data = numpy.fliplr(z_data)
 
 # scale matrix down to something that can be reasonably loaded in an html page
-matrix_size = 300
-m = subsample_matrix(z_data, matrix_size)
+# matrix_size = 300
+# m = subsample_matrix(z_data, matrix_size)
 
 # Create a surface plot
 # test = pickle.load(open('test.pickle', 'rb'))
-plot_data = [go.Surface(z=m)] #, go.Surface(z=test)]
+plot_data = [go.Surface(z=z_data)] #, go.Surface(z=test)]
 
 # Set up the camera so that the orientation of the surface is similar to the orientation of the associated image
 camera = dict(
@@ -39,6 +41,11 @@ camera = dict(
         center=dict(x=0, y=0, z=0),
         eye=dict(x=0, y=-1.6, z=1.35)
 )
+
+# aspect_things = dict(
+#         aspectmode='manual',
+#         aspectratio=dict(x=1, y=.2, z=1)
+# )
 
 # Grab the image associated with the lidar dataset to display next to the 3d surface plot. For now, images will be
 # stored in my github
@@ -82,7 +89,7 @@ fig = pt.make_subplots(1, 3, specs=[[{'is_3d': False}, {'is_3d': True}, {'is_3d'
 fig.append_trace(plot_data[0], 1, 2)
 # fig.append_trace(plot_data[1], 1, 3)
 fig['layout'].update(layout)
-fig['layout'].update(scene1=dict(camera=camera))  # need to look at console output to determine which key to update
+fig['layout'].update(scene1=dict(camera=camera,aspectmode='manual',aspectratio=dict(x=.2,y=1,z=1)))  # need to look at console output to determine which key to update
 
 # PLOT!
 a = po.plot(fig)
