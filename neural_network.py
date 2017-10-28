@@ -226,6 +226,7 @@ def main(_):
     training_data_total = int(split * total_data)
     # also want to ensure that the total data is evenly divisible by number of batches
     training_data_total -= training_data_total % batch_size
+    print(training_data_total)
 
     training_directories = data_directories[0:training_data_total]
     # test_directories = data_directories[training_data_total:]
@@ -241,9 +242,10 @@ def main(_):
         evaluation_batch['images'].append(evaluation_data['image'])
         evaluation_batch['topographies'].append(evaluation_data['topography'])
     # test_data_thread.start()
-    # min_elements = 50
-    # while training_data_queue.qsize() < min_elements:
-    #     print("Waiting for", min_elements, "to get into queue")
+    min_elements = 150
+    print("Waiting for", min_elements, "to get into queue")
+    while training_data_queue.qsize() < min_elements:
+        pass
     # print("Loading jp2 files...")
     # images = []
     # directories_used = []
@@ -322,8 +324,8 @@ def main(_):
             # Run training through the entire data set. Reaching the end of the dataset will be indicated by the thread
             # stopping and the queue getting emptied
             batch_number = 0
-            while training_data_thread.is_alive() or training_data_queue.not_empty():
-                print("Creating batch...")
+            while training_data_thread.is_alive() or training_data_queue.empty() == False:
+                print("Creating batch... (queue size is", training_data_queue.qsize(),")")
                 # batch_start = batch_number*batch_size
                 # batch_end = (batch_number+1)*batch_size
 
@@ -334,19 +336,19 @@ def main(_):
                     training_data = training_data_queue.get()
                     training_batch['images'].append(training_data['image'])
                     training_batch['topographies'].append(training_data['topography'])
-                print("Creating batch...done")
-                print("Running training", epoch, "-", batch_number, "...")
+                print("Creating batch...done. Data point:",training_batch['topographies'][0][100][100])
+                print("Running training", epoch, "-", batch_number, "/", training_data_total / batch_size, "...")
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
                 sess.run([train_step], feed_dict={x: training_batch['images'], y_: training_batch['topographies']},
                          options=run_options, run_metadata=run_metadata)
-                print("Running training", epoch, "-", batch_number, "...done")
+                print("Running training", epoch, "-", batch_number, "/", training_data_total / batch_size, "...done")
                 train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
                 sys.stdout.flush()
                 batch_number += 1
             # Now shuffle training directories and restart the thread
             training_directories.sort(key= lambda x: random())  # x is unused
-            training_data_thread = threading.Thread(target=enqueue, args=[training_directories])
+            training_data_thread = threading.Thread(target=enqueue, args=[training_directories, training_data_queue])
             training_data_thread.start()
             print("Evaluating training accuracy after:")
             train_accuracy = mean_squared_e.eval(feed_dict={
