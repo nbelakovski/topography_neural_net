@@ -5,25 +5,33 @@ import plotly.tools as pt
 import plotly.graph_objs as go
 import pickle
 from data.subsample_matrix import subsample_matrix
+import sys
+from data.utils import read_data
+
+data_dir = sys.argv[1]
 
 
 # pick some directory out of good datasets
-data_dir = os.listdir('data/completed')[0]
+item_dir = os.listdir(data_dir + '/completed')[2]
+print(item_dir)
 # scene_info = json.load(open('data/completed/'+ data_dir + '/' + data_dir + '.json', 'r'))
 # Load the topographical information in matrix form. The pickle file should have been created by
 # convert_las_to_matrix.py
-# pickle_filename = 'data/completed/' + data_dir + '/' + scene_info[0]['displayId'] + '.pickle'
-pickle_filename = [x for x in os.listdir('data/completed/' + data_dir) if x[-6:] == "pickle"][0]
-print(pickle_filename)
-z_data = pickle.load(open('data/completed/' + data_dir + '/' + pickle_filename, 'rb'))
+# data_filename = 'data/completed/' + data_dir + '/' + scene_info[0]['displayId'] + '.pickle'
+data_filename = [x for x in os.listdir(data_dir + '/completed/' + item_dir) if x[-5:] == ".data"][0]
+print(data_filename)
+z_data = read_data(data_dir + '/completed/' + item_dir + '/' + data_filename)
+
+# Crop it down, to test how to crop
+z_data = z_data[-500:, 0:500]
 
 # scale matrix down to something that can be reasonably loaded in an html page
 matrix_size = 300
 m = subsample_matrix(z_data, matrix_size)
 
 # Create a surface plot
-test = pickle.load(open('test.pickle', 'rb'))
-plot_data = [go.Surface(z=m), go.Surface(z=test)]
+# test = pickle.load(open('test.pickle', 'rb'))
+plot_data = [go.Surface(z=m)] #, go.Surface(z=test)]
 
 # Set up the camera so that the orientation of the surface is similar to the orientation of the associated image
 camera = dict(
@@ -72,7 +80,7 @@ layout = go.Layout(
 # The first subplot isn't actually used - the image is carefully placed to take up that slot
 fig = pt.make_subplots(1, 3, specs=[[{'is_3d': False}, {'is_3d': True}, {'is_3d': True}]])
 fig.append_trace(plot_data[0], 1, 2)
-fig.append_trace(plot_data[1], 1, 3)
+# fig.append_trace(plot_data[1], 1, 3)
 fig['layout'].update(layout)
 fig['layout'].update(scene1=dict(camera=camera))  # need to look at console output to determine which key to update
 

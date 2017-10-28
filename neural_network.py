@@ -29,7 +29,7 @@ from data.utils import read_data
 
 FLAGS = None
 
-output_size = 28*8  # Current comes from size of last input layer and 3 deconv layers with stride 2
+input_size = 700
 batch_size = 3
 
 
@@ -46,40 +46,40 @@ def deepnn(x):
 
     # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
-        w_conv1 = weight_variable([5, 5, 3, 64])
-        b_conv1 = bias_variable([64])
+        w_conv1 = weight_variable([5, 5, 3, 100])
+        b_conv1 = bias_variable([100])
         temp = conv2d(x, w_conv1)
         h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
         tf.summary.histogram('histogram', h_conv1)
 
     # Pooling layer - downsamples.
     with tf.name_scope('pool1'):
-        h_pool1 = max_pool_3x3(h_conv1)
+        h_pool1 = max_pool_2x2(h_conv1)
 
-    # Second convolutional layer -- maps 64 feature maps to 64.
+    # Second convolutional layer
     with tf.name_scope('conv2'):
-        w_conv2 = weight_variable([5, 5, 64, 64])
-        b_conv2 = bias_variable([64])
+        w_conv2 = weight_variable([5, 5, 100, 100])
+        b_conv2 = bias_variable([100])
         h_conv2 = tf.nn.relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
     # Second pooling layer.
     with tf.name_scope('pool2'):
-        h_pool2 = max_pool_3x3(h_conv2)
+        h_pool2 = max_pool_2x2(h_conv2)
 
-    # Third convolutional layer -- maps 64 feature maps to 32.
+    # Third convolutional layer
     with tf.name_scope('conv3'):
-        w_conv3 = weight_variable([5, 5, 64, 32])
-        b_conv3 = bias_variable([32])
+        w_conv3 = weight_variable([5, 5, 100, 100])
+        b_conv3 = bias_variable([100])
         h_conv3 = tf.nn.relu(conv2d(h_pool2, w_conv3) + b_conv3)
 
     # Third pooling layer.
     with tf.name_scope('pool3'):
         h_pool3 = max_pool_2x2(h_conv3)
 
-    # Fourth convolutional layer -- maps 32 feature maps to 16.
+    # Fourth convolutional layer
     with tf.name_scope('conv4'):
-        w_conv4 = weight_variable([5, 5, 32, 16])
-        b_conv4 = bias_variable([16])
+        w_conv4 = weight_variable([5, 5, 100, 50])
+        b_conv4 = bias_variable([50])
         h_conv4 = tf.nn.relu(conv2d(h_pool3, w_conv4) + b_conv4)
 
     # Fourth pooling layer.
@@ -90,30 +90,30 @@ def deepnn(x):
     final_pool_dim = h_pool4.shape.dims[1].value
     with tf.name_scope('deconv1'):
         stride1 = 2
-        w_deconv1 = weight_variable([7, 7, 8, 16])  # height, width, out channels, in channels
-        out_shape = [batch_size, final_pool_dim * stride1, final_pool_dim * stride1, 8]
+        w_deconv1 = weight_variable([7, 7, 25, 50])  # height, width, out channels, in channels
+        out_shape = [batch_size, final_pool_dim * stride1, final_pool_dim * stride1, 25]
         h_deconv1 = tf.nn.relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
     # Second deconvolutional layer
     with tf.name_scope('deconv2'):
         stride2 = 2
-        w_deconv2 = weight_variable([7, 7, 4, 8])
-        out_shape = [batch_size, final_pool_dim * stride1 * stride2, final_pool_dim * stride1 * stride2, 4]
+        w_deconv2 = weight_variable([7, 7, 10, 25])
+        out_shape = [batch_size, final_pool_dim * stride1 * stride2, final_pool_dim * stride1 * stride2, 10]
         h_deconv2 = tf.nn.relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
     # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
-        w_deconv3 = weight_variable([7, 7, 1, 4])
+        w_deconv3 = weight_variable([7, 7, 1, 10])
         out_shape = [batch_size, final_pool_dim * stride1 * stride2 * stride3,
                      final_pool_dim * stride1 * stride2 * stride3, 1]
-        assert(final_pool_dim * stride1 * stride2 * stride3 == output_size)
+        deepnn.output_size = final_pool_dim * stride1 * stride2 * stride3
         h_deconv3 = tf.nn.relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
 
     with tf.name_scope('output'):
         # For use in the loss function, and in the inference script, rearrange the last layer to remove batch size and
         # the reference to the single channel
-        y_conv = tf.reshape(h_deconv3, [-1, output_size, output_size], name="final_op")
+        y_conv = tf.reshape(h_deconv3, [-1, deepnn.output_size, deepnn.output_size], name="final_op")
     return y_conv
 
 
@@ -160,7 +160,9 @@ def import_data_files(directories):
     for i, directory in enumerate(directories):
         topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, 'completed', directory)) if x[-5:] == '.data'][0]
         data = read_data(os.path.join(FLAGS.data_dir,'completed', directory, topo_filename))
-        topography_data.append(subsample_matrix(data, output_size))
+        # crop the data as appropriate
+        data = data[-input_size:, 0:input_size]
+        topography_data.append(subsample_matrix(data, deepnn.output_size))
         del data
         if i % 25 == 0:
             print("Processed", i, "data files")
@@ -169,13 +171,13 @@ def import_data_files(directories):
 
 def main(_):
     # Create the model
-    x = tf.placeholder(tf.float32, [None, 1008, 990, 3], name="input")
-
-    # Define loss and optimizer
-    y_ = tf.placeholder(tf.float32, [None, output_size, output_size])
+    x = tf.placeholder(tf.float32, [None, input_size, input_size, 3], name="input")
 
     # Build the graph for the deep net
     y_conv = deepnn(x)
+
+    # Define loss and optimizer
+    y_ = tf.placeholder(tf.float32, [None, deepnn.output_size, deepnn.output_size])
 
     with tf.name_scope('loss'):
         mean_squared_e = tf.losses.mean_squared_error(labels=y_,
@@ -200,12 +202,12 @@ def main(_):
         jp2_file = glymur.Jp2k(jp2_filename)
         image_height = jp2_file.shape[0]
         image_width = jp2_file.shape[1]
-        if image_height < 1008 or image_height > 1015:
+        if image_height < 700 or image_width < 700:
             continue
-        if image_width < 990 or image_width > 995:
-            continue
-        images.append(jp2_file[0:1008, 0:990, :])
+        images.append(jp2_file[0:700, 0:700, :])
         directories_used.append(directory)
+        # if len(images) > 150:
+        #     break
     print("Loading jp2 files...done. Got", len(directories_used), "images")
     sys.stdout.flush()
 
