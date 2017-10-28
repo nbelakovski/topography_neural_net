@@ -1,4 +1,5 @@
 #include "pybind11/pybind11.h"
+#include "pybind11/numpy.h"
 #include "convert_las_to_matrix.hpp"
 #include "read_data.hpp"
 
