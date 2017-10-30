@@ -29,5 +29,5 @@ def convert(folder_name):
 
 with open(sys.argv[1], 'r') as f:
     directories = f.read().splitlines()
-with Pool(20) as p:
+with Pool(3) as p:
     p.map(convert, directories)

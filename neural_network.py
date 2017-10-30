@@ -23,6 +23,7 @@ import tempfile
 import glymur
 import tensorflow as tf
 import os
+from math import gcd
 from random import random
 from data.subsample_matrix import subsample_matrix
 from data.utils import read_data
@@ -33,9 +34,9 @@ from random import random
 FLAGS = None
 
 input_size = 700
-batch_size = 3
+batch_size = 5
 # Set up a Queue for asynchronously loading the data
-training_data_queue = Queue(1000)
+training_data_queue = Queue(200)
 
 
 def deepnn(x):
@@ -160,13 +161,17 @@ def bias_variable(shape):
     return tf.Variable(initial)
 
 
-def import_data_file(directory):
-    topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, 'completed', directory)) if x[-5:] == '.data'][0]
-    data = read_data(os.path.join(FLAGS.data_dir,'completed', directory, topo_filename))
+def import_data_file(directory, type='completed'):
+    topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, type, directory)) if x[-5:] == '.data'][0]
+    data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
     data = numpy.flipud(data) # flip it around so that the data points match the pixel layout
     # crop the data as appropriate
     data = data[0:input_size, 0:input_size]
     reduced_data = subsample_matrix(data, deepnn.output_size)
+    # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
+    # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
+    # relative topography. It's also helpful that it's a fast operation
+    reduced_data -= reduced_data.mean()
     del data
     return reduced_data
 
@@ -184,9 +189,24 @@ def enqueue(directories):
     for d in directories:
         # load the jp2 file
         jp2_filename = os.path.join(FLAGS.data_dir, 'completed', d, 'cropped.jp2')
-        jp2_file = glymur.Jp2k(jp2_filename)[0:input_size, 0:input_size, :]
+        jp2_file = glymur.Jp2k(jp2_filename)
+        if 578 in jp2_file.shape:
+            print(d)
+        jp2_file = jp2_file[0:input_size, 0:input_size, :]
         data_file = import_data_file(d)
         training_data_queue.put({'image':jp2_file, 'topography': data_file}, block=True)
+
+
+def get_useful_directories():
+    data_directories = os.listdir(FLAGS.data_dir + '/completed')
+    def shape_ok(d):
+        with open(FLAGS.data_dir + '/completed/' + d + '/cropped', 'r') as f:
+            shape = [int(x) for x in f.readline().split(',')]
+            if shape[0] < input_size or shape[1] < input_size:
+                return False
+        return True
+    data_directories = [x for x in data_directories if shape_ok(x)]
+    return data_directories
 
 
 def main(_):
@@ -212,26 +232,17 @@ def main(_):
     train_writer.add_graph(tf.get_default_graph())
 
     # Get a list of all the directories that contain good data
-    data_directories = os.listdir(FLAGS.data_dir + '/completed')
-    for d in data_directories:
-        with open(FLAGS.data_dir + '/completed/' + d + '/cropped', 'r') as f:
-            shape = [int(x) for x in f.readline().split(',')]
-            if shape[0] < 700 or shape[1] < 700:
-                data_directories.remove(d)
+    data_directories = get_useful_directories()
 
     # Break off some of these directories into a separate test set
     total_data = len(data_directories)
-    split = 0.9
-    training_data_total = int(split * total_data)
     # also want to ensure that the total data is evenly divisible by number of batches and processes
-    num_processes = 4  # number of processes used to populate the queue
-    training_data_total -= training_data_total % (batch_size * num_processes)
-    print(training_data_total)
-
-    training_directories = data_directories[0:training_data_total]
-
-    # training_data_thread = threading.Thread(target=enqueue, args=[training_directories, training_data_queue])
-    # training_data_thread.start()
+    num_processes = 3  # number of processes used to populate the queue
+    def lcm(a, b):
+        return int((a*b) / gcd(a, b))
+    total_data -= total_data % lcm(batch_size, num_processes)
+    print(total_data)
+    training_directories = data_directories[0:total_data]
 
     chunk_size = int(len(training_directories) / num_processes)
     args = [[training_directories[i:i+chunk_size]] for i in range(0, len(training_directories), chunk_size)]
@@ -243,10 +254,15 @@ def main(_):
 
     # grab batch_size items out of the queue to have them for the periodic accuracy evaluation
     evaluation_batch = {'images': [], 'topographies': []}
-    for i in range(batch_size):
-        evaluation_data = training_data_queue.get()
-        evaluation_batch['images'].append(evaluation_data['image'])
-        evaluation_batch['topographies'].append(evaluation_data['topography'])
+    dirs = os.listdir(FLAGS.data_dir + '/evaluation')
+    for d in dirs:
+        jp2_filename = os.path.join(FLAGS.data_dir, 'evaluation', d, 'cropped.jp2')
+        jp2_file = glymur.Jp2k(jp2_filename)[0:input_size, 0:input_size, :]
+        data_file = import_data_file(d, 'evaluation')
+        evaluation_batch['images'].append(jp2_file)
+        evaluation_batch['topographies'].append(data_file)
+        if len(evaluation_batch['images']) == batch_size:
+            break
 
 
 
@@ -257,7 +273,6 @@ def main(_):
     model_path = os.path.join(model_directory, model_name)
     backup_directory = "backup"
     backup_path = os.path.join(backup_directory, model_name)  # save to two location, read from one
-    print("asdf")
 
     # In attempting to deal with GPU issues, I will try to get tensorflow to only allocate gpu memory as needed, instead
     # of having it allocate all the GPU memory, which is what it does by default
@@ -289,19 +304,29 @@ def main(_):
                     training_batch['images'].append(training_data['image'])
                     training_batch['topographies'].append(training_data['topography'])
                 print("Creating batch...done. Data point:",training_batch['topographies'][0][100][100])
-                print("Running training", epoch, "-", batch_number, "/", training_data_total / batch_size, "...")
+                print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...")
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
                 sess.run([train_step], feed_dict={x: training_batch['images'], y_: training_batch['topographies']},
                          options=run_options, run_metadata=run_metadata)
-                print("Running training", epoch, "-", batch_number, "/", training_data_total / batch_size, "...done")
+                print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...done")
                 train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
                 sys.stdout.flush()
+                # not sure if Python garbage collector is lagging behind or something, but this thing seems to take up
+                # a lot more RAM than I think it should. I'll manually delete data here to try to avoid eating up all RAM
+                del training_batch
+                del run_options
+                del run_metadata
                 batch_number += 1
             for p in processes:
                 p.terminate()
-                processes.remove(p)
+            processes.clear()
             # Now shuffle training directories and restart the thread
+            data_directories = get_useful_directories()
+            total_data = len(data_directories)
+            total_data -= total_data % lcm(batch_size, num_processes)
+            training_directories = data_directories[0:total_data]
+            chunk_size = int(len(training_directories) / num_processes)
             training_directories.sort(key= lambda x: random())  # x is unused
             args = [[training_directories[i:i + chunk_size]] for i in range(0, len(training_directories), chunk_size)]
             for arg in args:
@@ -314,6 +339,7 @@ def main(_):
             train_accuracy = mean_squared_e.eval(feed_dict={
                 x: evaluation_batch['images'], y_: evaluation_batch['topographies']})
             print('epoch %d, training accuracy %g' % (epoch, train_accuracy))
+            del train_accuracy
             saver.save(sess, model_path)
             saver.save(sess, backup_path)
 

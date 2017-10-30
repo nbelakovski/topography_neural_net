@@ -8,8 +8,9 @@ import sys
 from time import sleep
 
 DATA_DIR=sys.argv[1]
+source_data_filename = sys.argv[2]
 os.chdir(DATA_DIR)
-paired_data = json.load(open('paired_data.json', 'r'))
+paired_data = json.load(open(source_data_filename, 'r'))
 
 API_key = "39fa86f1e5454638a9d4bfc78f5e2037"
 

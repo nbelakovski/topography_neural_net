@@ -31,8 +31,18 @@ def crop(folder_name):
     data = json.load(open(json_filename))
     lidar_points = [float(x) for x in data[0]['sceneBounds'].split(',')]
     image_points = [float(x) for x in data[1]['sceneBounds'].split(',')]
+    
+    # Check that the lidar is entirely within the image
+    latitude_check = image_points[1] < lidar_points[1] < lidar_points[3] < image_points[3]
+    longitude_check = image_points[0] < lidar_points[0] < lidar_points[2] < image_points[2]
+    if not latitude_check or not longitude_check:
+        with open('failed.txt','w') as f:
+            f.write('lidar out of bounds.')
+        with open('lidar_oob','w') as f:  # make a separate empty file to make it easier to see the cause of failure upon manual investigation
+            f.write('')
+        return
 
-    # b) (Note, implicit assumption being made here that lidar data is entirely within image data)
+    # b)
     dx1 = image_points[2] - image_points[0]
     dx2 = lidar_points[0] - image_points[0]
     dx3 = lidar_points[2] - image_points[0]
@@ -84,5 +94,5 @@ def crop(folder_name):
 
 with open(sys.argv[1], 'r') as f:
     directories = f.read().splitlines()
-with multiprocessing.Pool(20) as p:
+with multiprocessing.Pool(3) as p:
     p.map(crop, directories)

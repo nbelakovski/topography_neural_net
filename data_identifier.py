@@ -13,10 +13,10 @@ API_key = "436411e433824075ae241eb8abc83824"
 # west_coast_sw_lon = -125.0
 # west_coast_ne_lat = 49.0
 # west_coast_ne_lon = -119.0
-west_coast_sw_lat = 48		
-west_coast_sw_lon = -121.4		
-west_coast_ne_lat = 48.4		
-west_coast_ne_lon = -120.7
+west_coast_sw_lat = 47
+west_coast_sw_lon = -125
+west_coast_ne_lat = 48
+west_coast_ne_lon = -122.2
 
 
 def create_lat_lon_dict(lat, lon):
@@ -67,7 +67,7 @@ def get_topo_data():
             "datasetName": "LIDAR",
             "spatialFilter":
                 create_spatial_filter(west_coast_sw_lat, west_coast_sw_lon, west_coast_ne_lat, west_coast_ne_lon),
-            "maxResults": 1000}
+            "maxResults": 3000}
     r = requests.post(datasets_url, data={'jsonRequest': json.dumps(data)})
 
     if r.json()['errorCode'] is None:
@@ -140,6 +140,9 @@ def get_image_data(input_topo_data):
     return paired_data
 
 
+if len(sys.argv) < 2:
+    print("Usage: python3 data_identifier.py output_filename")
+    sys.exit(1)
 get_api_key()
 print("=======================")
 print("Getting topography data")
@@ -152,5 +155,5 @@ print("Getting image data")
 print("=================")
 paired_data_to_download = get_image_data(topo_data)
 
-with open(sys.argv[1] + '/paired_data.json', 'w') as f:
+with open(sys.argv[1], 'w') as f:
     json.dump(paired_data_to_download, f, indent=4)

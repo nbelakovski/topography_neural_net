@@ -1,8 +1,8 @@
 #!/bin/bash -xe
 
 NUMARGS=$#
-if [[ $NUMARGS -ne 1 ]]; then
-    echo "Usage: ./pipeline.sh DATA_DIRECTORY"
+if [[ $NUMARGS -ne 2 ]]; then
+    echo "Usage: ./pipeline.sh DATA_DIRECTORY DATA_FILENAME"
     exit
 fi
 
@@ -17,12 +17,14 @@ mkdir -p failed
 mkdir -p downloading
 cd $CWD
 
+DATA_FILENAME=$2
 # Start the downloader and grab it's PID. We will be watching for it to be done
-python3 downloader.py $DATA_DIR > $DATA_DIR/downloader.log 2>&1 &
+python3 downloader.py $DATA_DIR $DATA_FILENAME > $DATA_DIR/downloader.log 2>&1 &
 DOWNLOADER_PID=$!
 echo "Downloader PID: $DOWNLOADER_PID"
 
-
+rm -f folders_to_process.txt
+rm -f remaining_folders_to_process.txt
 # Every 10 minutes or so, check the directories in 'downloading'
 # If all the wget-log files in a directory contain the word 'saved', move the directory to the 'preprocessing' folder
 # and launch the preprocessing scripts. Once they're done, move the folder to the 'completed' folder
@@ -58,6 +60,8 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
     CROP_PID=$!
     echo "Unzipping and removing. CROP_PID: $CROP_PID"
     python3 unzip_and_remove.py folders_to_process.txt
+    echo "Waiting on cropping"
+    wait ${CROP_PID}
     # Some folders have shown issues where their ZIP does not appear to contain an LAS. Look for those folders and move them to failed
     # Also note which folder are successful, so that the new list can be passed to convert_last_to_matrix.py.
     FOLDERS=$(cat folders_to_process.txt | awk -F'/' '{print $6}')
@@ -76,8 +80,6 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
              echo $DATA_DIR/preprocessing/$FOLDER >> remaining_folders_to_process.txt
         fi
     done
-    echo "Waiting on cropping"
-    wait ${CROP_PID}
     echo "Converting LAS to matrix"
     if [[ -e remaining_folders_to_process.txt ]] ; then
         python3 convert_las_to_matrix.py remaining_folders_to_process.txt
