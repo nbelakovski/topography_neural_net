@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-"""A deep  classifier using convolutional layers.
+"""A deep  regressor using convolutional layers.
 """
 import glymur
 import pickle
@@ -10,7 +10,6 @@ import sys
 
 def main(args):
   # Import data
-  pass  # placeholder
 
   model_directory = "tnn_model"
   model_name = "tnn"
@@ -23,11 +22,13 @@ def main(args):
     x = graph.get_tensor_by_name("input:0")
     op = graph.get_tensor_by_name("output/final_op:0")
 
-    jp2_filename = 'data/completed/0025f3/cropped.jp2'
+    jp2_filename = 'sample_data/01824c/cropped.jp2'
     jp2_file = glymur.Jp2k(jp2_filename)
-    data = jp2_file[0:1008, 0:990, :]
+    data = jp2_file[0:800, 0:800, :]
 
-    feed_dict1 = {x: [data, data, data]} # needed due to batch size of network
+    batch_size = 5
+    input_array = [data for x in range(batch_size)]
+    feed_dict1 = {x: input_array}
 
     print("Running session")
     out = sess.run(op, feed_dict=feed_dict1)

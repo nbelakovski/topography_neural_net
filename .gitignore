@@ -1,4 +1,6 @@
 password.txt
+*.err
+*.out
 utils.cpython-35m-x86_64-linux-gnu.so
 *.log
 *.txt
