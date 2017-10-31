@@ -1,0 +1,92 @@
+[
+    {
+        "sceneBounds": "-124.10905,47.820986,-124.0954721,47.8301277",
+        "startTime": "2013-01-13",
+        "bulkOrdered": false,
+        "orderUrl": null,
+        "metadataUrl": "https://earthexplorer.usgs.gov/metadata/xml/4895/995615/",
+        "entityId": "995615",
+        "displayId": "WA_OLYMPIC_PENINSULA_2013_000507",
+        "fgdcMetadataUrl": "https://earthexplorer.usgs.gov/fgdc/4895/995615/save_xml",
+        "endTime": "2014-01-25",
+        "modifiedDate": "2013-01-13",
+        "acquisitionDate": "2013-01-13",
+        "summary": "Entity ID: WA_OLYMPIC_PENINSULA_2013_000507, Acquisition Date: 13-JAN-13, State: WA, Project: WA_OLYMPIC_PENINSULA_2013",
+        "spatialFootprint": {
+            "coordinates": [
+                [
+                    [
+                        -124.1088583,
+                        47.820986
+                    ],
+                    [
+                        -124.0954721,
+                        47.8211138
+                    ],
+                    [
+                        -124.0956638,
+                        47.8301277
+                    ],
+                    [
+                        -124.10905,
+                        47.8299999
+                    ],
+                    [
+                        -124.1088583,
+                        47.820986
+                    ]
+                ]
+            ],
+            "type": "Polygon"
+        },
+        "downloadUrl": "https://earthexplorer.usgs.gov/download/external/options/LIDAR/995615/INVSVC/",
+        "ordered": false,
+        "dataAccessUrl": "https://earthexplorer.usgs.gov/order/process?dataset_name=LIDAR&ordered=995615&node=INVSVC",
+        "browseUrl": "https://earthexplorer.usgs.gov/browse/lidar/WA/2013/WA_Olympic_Peninsula_2013/WA_Olympic_Peninsula_2013_000507.jpg"
+    },
+    {
+        "sceneBounds": "-124.1304943,47.8091194,-124.0557805,47.8785721",
+        "startTime": "2006-06-25",
+        "bulkOrdered": false,
+        "orderUrl": null,
+        "metadataUrl": "https://earthexplorer.usgs.gov/metadata/xml/5520/1349913/",
+        "entityId": "1349913",
+        "displayId": "N_4712416_NW_10_1_20060625_20061214",
+        "fgdcMetadataUrl": "https://earthexplorer.usgs.gov/fgdc/5520/1349913/save_xml",
+        "endTime": "2006-06-25",
+        "modifiedDate": "2016-07-25",
+        "acquisitionDate": "2006-06-25",
+        "summary": "Entity ID: N_4712416_NW_10_1_20060625_20061214, NAIP Entity ID: N_4712416_NW_10_1_20060625_20061214, Acquisition Date: 25-JUN-06, Coordinates: 47.8438499 , -124.093111",
+        "spatialFootprint": {
+            "coordinates": [
+                [
+                    [
+                        -124.1289999,
+                        47.8091194
+                    ],
+                    [
+                        -124.0557805,
+                        47.8098166
+                    ],
+                    [
+                        -124.057175,
+                        47.8785721
+                    ],
+                    [
+                        -124.1304943,
+                        47.8778721
+                    ],
+                    [
+                        -124.1289999,
+                        47.8091194
+                    ]
+                ]
+            ],
+            "type": "Polygon"
+        },
+        "downloadUrl": "https://earthexplorer.usgs.gov/download/external/options/NAIP_COMPRESSED/1349913/INVSVC/",
+        "ordered": false,
+        "dataAccessUrl": "https://earthexplorer.usgs.gov/order/process?dataset_name=NAIP_COMPRESSED&ordered=1349913&node=INVSVC",
+        "browseUrl": "https://earthexplorer.usgs.gov/browse/naip/fullres/WA/2006/200607_washington_naip_1x0000m_clr/47124/n_4712416_nw_10_1_20060625.jpg"
+    }
+]
