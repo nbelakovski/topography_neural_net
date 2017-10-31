@@ -23,6 +23,7 @@ import tempfile
 import glymur
 import tensorflow as tf
 import os
+from time import sleep
 from math import gcd
 from random import random
 from data.subsample_matrix import subsample_matrix
@@ -33,10 +34,10 @@ from random import random
 
 FLAGS = None
 
-input_size = 700
+input_size = 800
 batch_size = 5
 # Set up a Queue for asynchronously loading the data
-training_data_queue = Queue(200)
+training_data_queue = Queue(500)
 
 
 def deepnn(x):
@@ -52,8 +53,8 @@ def deepnn(x):
 
     # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
-        w_conv1 = weight_variable([5, 5, 3, 100])
-        b_conv1 = bias_variable([100])
+        w_conv1 = weight_variable([3, 3, 3, 50])
+        b_conv1 = bias_variable([50])
         temp = conv2d(x, w_conv1)
         h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
         tf.summary.histogram('histogram', h_conv1)
@@ -64,8 +65,8 @@ def deepnn(x):
 
     # Second convolutional layer
     with tf.name_scope('conv2'):
-        w_conv2 = weight_variable([5, 5, 100, 100])
-        b_conv2 = bias_variable([100])
+        w_conv2 = weight_variable([3, 3, 50, 50])
+        b_conv2 = bias_variable([50])
         h_conv2 = tf.nn.relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
     # Second pooling layer.
@@ -74,8 +75,8 @@ def deepnn(x):
 
     # Third convolutional layer
     with tf.name_scope('conv3'):
-        w_conv3 = weight_variable([5, 5, 100, 100])
-        b_conv3 = bias_variable([100])
+        w_conv3 = weight_variable([3, 3, 50, 50])
+        b_conv3 = bias_variable([50])
         h_conv3 = tf.nn.relu(conv2d(h_pool2, w_conv3) + b_conv3)
 
     # Third pooling layer.
@@ -84,7 +85,7 @@ def deepnn(x):
 
     # Fourth convolutional layer
     with tf.name_scope('conv4'):
-        w_conv4 = weight_variable([5, 5, 100, 50])
+        w_conv4 = weight_variable([3, 3, 50, 50])
         b_conv4 = bias_variable([50])
         h_conv4 = tf.nn.relu(conv2d(h_pool3, w_conv4) + b_conv4)
 
@@ -96,21 +97,21 @@ def deepnn(x):
     final_pool_dim = h_pool4.shape.dims[1].value
     with tf.name_scope('deconv1'):
         stride1 = 2
-        w_deconv1 = weight_variable([7, 7, 25, 50])  # height, width, out channels, in channels
+        w_deconv1 = weight_variable([3, 3, 25, 50])  # height, width, out channels, in channels
         out_shape = [batch_size, final_pool_dim * stride1, final_pool_dim * stride1, 25]
         h_deconv1 = tf.nn.relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
     # Second deconvolutional layer
     with tf.name_scope('deconv2'):
         stride2 = 2
-        w_deconv2 = weight_variable([7, 7, 10, 25])
+        w_deconv2 = weight_variable([3, 3, 10, 25])
         out_shape = [batch_size, final_pool_dim * stride1 * stride2, final_pool_dim * stride1 * stride2, 10]
         h_deconv2 = tf.nn.relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
     # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
-        w_deconv3 = weight_variable([7, 7, 1, 10])
+        w_deconv3 = weight_variable([3, 3, 1, 10])
         out_shape = [batch_size, final_pool_dim * stride1 * stride2 * stride3,
                      final_pool_dim * stride1 * stride2 * stride3, 1]
         deepnn.output_size = final_pool_dim * stride1 * stride2 * stride3
@@ -186,12 +187,12 @@ def import_data_files(directories):
 
 
 def enqueue(directories):
+    sys.stdout = open(str(os.getpid()) + '.out', 'w')
+    sys.stderr = open(str(os.getpid()) + '.err', 'w')
     for d in directories:
         # load the jp2 file
         jp2_filename = os.path.join(FLAGS.data_dir, 'completed', d, 'cropped.jp2')
         jp2_file = glymur.Jp2k(jp2_filename)
-        if 578 in jp2_file.shape:
-            print(d)
         jp2_file = jp2_file[0:input_size, 0:input_size, :]
         data_file = import_data_file(d)
         training_data_queue.put({'image':jp2_file, 'topography': data_file}, block=True)
@@ -215,6 +216,7 @@ def main(_):
 
     # Build the graph for the deep net
     y_conv = deepnn(x)
+    print("Output size:", deepnn.output_size)
 
     # Define loss and optimizer
     y_ = tf.placeholder(tf.float32, [None, deepnn.output_size, deepnn.output_size])
@@ -237,7 +239,7 @@ def main(_):
     # Break off some of these directories into a separate test set
     total_data = len(data_directories)
     # also want to ensure that the total data is evenly divisible by number of batches and processes
-    num_processes = 3  # number of processes used to populate the queue
+    num_processes = 6  # number of processes used to populate the queue
     def lcm(a, b):
         return int((a*b) / gcd(a, b))
     total_data -= total_data % lcm(batch_size, num_processes)
@@ -292,6 +294,10 @@ def main(_):
             print("Initializing global variables...done")
 
         for epoch in range(11000):
+            print("Building up data queue")
+            while training_data_queue.full() == False:
+                sleep(2)
+                print(training_data_queue.qsize())
             print("Running epoch", epoch)
             # Run training through the entire data set. Reaching the end of the dataset will be indicated by the thread
             # stopping and the queue getting emptied
@@ -303,7 +309,7 @@ def main(_):
                     training_data = training_data_queue.get()
                     training_batch['images'].append(training_data['image'])
                     training_batch['topographies'].append(training_data['topography'])
-                print("Creating batch...done. Data point:",training_batch['topographies'][0][100][100])
+                print("Creating batch...done. Data point:",training_batch['topographies'][0][10][10])
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...")
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
