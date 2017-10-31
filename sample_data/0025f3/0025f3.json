@@ -1,0 +1,92 @@
+[
+    {
+        "displayId": "WA_GLACIERPEAK_2014_000064",
+        "spatialFootprint": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [
+                        -121.114325,
+                        48.2427388
+                    ],
+                    [
+                        -121.1008361,
+                        48.2425166
+                    ],
+                    [
+                        -121.1005027,
+                        48.251525
+                    ],
+                    [
+                        -121.1139916,
+                        48.2517472
+                    ],
+                    [
+                        -121.114325,
+                        48.2427388
+                    ]
+                ]
+            ]
+        },
+        "modifiedDate": "2014-08-25",
+        "startTime": "2014-08-25",
+        "sceneBounds": "-121.114325,48.2425166,-121.1005027,48.2517472",
+        "summary": "Entity ID: WA_GLACIERPEAK_2014_000064, Acquisition Date: 25-AUG-14, State: WA, Project: WA_GLACIERPEAK_2014",
+        "browseUrl": "https://earthexplorer.usgs.gov/browse/lidar/WA/2014/WA_GlacierPeak_2014/WA_GlacierPeak_2014_000064.jpg",
+        "metadataUrl": "https://earthexplorer.usgs.gov/metadata/xml/4895/1107313/",
+        "downloadUrl": "https://earthexplorer.usgs.gov/download/external/options/LIDAR/1107313/INVSVC/",
+        "fgdcMetadataUrl": "https://earthexplorer.usgs.gov/fgdc/4895/1107313/save_xml",
+        "ordered": false,
+        "bulkOrdered": false,
+        "entityId": "1107313",
+        "acquisitionDate": "2014-08-25",
+        "endTime": "2015-06-24",
+        "dataAccessUrl": "https://earthexplorer.usgs.gov/order/process?dataset_name=LIDAR&ordered=1107313&node=INVSVC",
+        "orderUrl": null
+    },
+    {
+        "displayId": "N_4812156_NW_10_1_20060805_20061218",
+        "spatialFootprint": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [
+                        -121.1314777,
+                        48.1848583
+                    ],
+                    [
+                        -121.0573222,
+                        48.1836305
+                    ],
+                    [
+                        -121.0547027,
+                        48.2527833
+                    ],
+                    [
+                        -121.1289582,
+                        48.2540166
+                    ],
+                    [
+                        -121.1314777,
+                        48.1848583
+                    ]
+                ]
+            ]
+        },
+        "modifiedDate": "2016-07-25",
+        "startTime": "2006-08-05",
+        "sceneBounds": "-121.1314777,48.1836305,-121.0547027,48.2540166",
+        "summary": "Entity ID: N_4812156_NW_10_1_20060805_20061218, NAIP Entity ID: N_4812156_NW_10_1_20060805_20061218, Acquisition Date: 05-AUG-06, Coordinates: 48.2188277 , -121.0931166",
+        "browseUrl": "https://earthexplorer.usgs.gov/browse/naip/fullres/WA/2006/200607_washington_naip_1x0000m_clr/48121/n_4812156_nw_10_1_20060805.jpg",
+        "metadataUrl": "https://earthexplorer.usgs.gov/metadata/xml/5520/1351232/",
+        "downloadUrl": "https://earthexplorer.usgs.gov/download/external/options/NAIP_COMPRESSED/1351232/INVSVC/",
+        "fgdcMetadataUrl": "https://earthexplorer.usgs.gov/fgdc/5520/1351232/save_xml",
+        "ordered": false,
+        "bulkOrdered": false,
+        "entityId": "1351232",
+        "acquisitionDate": "2006-08-05",
+        "endTime": "2006-08-05",
+        "dataAccessUrl": "https://earthexplorer.usgs.gov/order/process?dataset_name=NAIP_COMPRESSED&ordered=1351232&node=INVSVC",
+        "orderUrl": null
+    }
+]
