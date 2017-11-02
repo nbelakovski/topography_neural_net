@@ -5,6 +5,8 @@ import requests
 import sys
 from math import ceil, floor
 import sys
+import dateutil.parser as dateparser
+from datetime import date
 
 # Some globals
 
@@ -13,9 +15,9 @@ API_key = "436411e433824075ae241eb8abc83824"
 # west_coast_sw_lon = -125.0
 # west_coast_ne_lat = 49.0
 # west_coast_ne_lon = -119.0
-west_coast_sw_lat = 47
-west_coast_sw_lon = -125
-west_coast_ne_lat = 48
+west_coast_sw_lat = 46
+west_coast_sw_lon = -124
+west_coast_ne_lat = 46.9
 west_coast_ne_lon = -122.2
 
 
@@ -79,22 +81,6 @@ def get_topo_data():
         sys.exit(-3)
 
 
-# This function should calculate the overlap of two rectangles given 4 coordinates
-# Input is two arrays, each containing the lower left and upper right coordinate points
-# Despite the fact that these are latitudes and longitudes in non-euclidean space, we
-# will make the flat world assumption given that the region is small enough to be well
-# approximated by euclidean geometry
-def calculate_overlap(rect1, rect2):
-    # min of maxes - max of mins
-    dx = min(rect1[2], rect2[2]) - max(rect1[0], rect2[0])
-    dy = min(rect1[3], rect2[3]) - max(rect1[1], rect2[1])
-    if dx >= 0 and dy >= 0:
-        return dx*dy
-    else:
-        return 0
-
-
-
 # Get image data for each element of the topographical data
 # This function should return input/output pairs with enough information for downloading
 def get_image_data(input_topo_data):
@@ -118,19 +104,24 @@ def get_image_data(input_topo_data):
             # minimum Other concern: if several images have a similar overlap, i.e. within 10%, and all are above the
             # minimum, we should take the one that was recorded closest to the LIDAR data in time
             images = r.json()['data']['results']
-            max_overlap = 0
             input_image = None
+            lidar_date = dateparser.parse(lidar_scene['acquisitionDate']).date()
+            lidar_points = [float(x) for x in lidar_scene['sceneBounds'].split(',')]
+            date_delta = (date.max - lidar_date)
             for image_metadata in images:
-                # calculate overlap
-                rect1 = [float(x) for x in image_metadata['sceneBounds'].split(',')]
-                rect2 = [float(x) for x in lidar_scene['sceneBounds'].split(',')]
-                overlap = calculate_overlap(rect1, rect2)
-                if overlap > max_overlap:
+                image_points = [float(x) for x in image_metadata['sceneBounds'].split(',')]
+                image_date = dateparser.parse(image_metadata['acquisitionDate']).date()
+                
+                # Check that the lidar is entirely within the image
+                latitude_check = image_points[1] < lidar_points[1] < lidar_points[3] < image_points[3]
+                longitude_check = image_points[0] < lidar_points[0] < lidar_points[2] < image_points[2]
+                if latitude_check and longitude_check and abs(image_date - lidar_date) < date_delta:
                     input_image = image_metadata
-                    max_overlap = overlap
+                    date_delta = abs(image_date - lidar_date)
             # Once the proper image is determined, add its download information to the lidar_scene
-            data_pair = (lidar_scene, input_image)
-            paired_data.append(data_pair)
+            if input_image:
+                data_pair = (lidar_scene, input_image)
+                paired_data.append(data_pair)
         else:
             print("Failure to obtain datasets, return string: ", r.json())
 
