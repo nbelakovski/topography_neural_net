@@ -15,9 +15,9 @@ API_key = "436411e433824075ae241eb8abc83824"
 # west_coast_sw_lon = -125.0
 # west_coast_ne_lat = 49.0
 # west_coast_ne_lon = -119.0
-west_coast_sw_lat = 46
+west_coast_sw_lat = 45.5
 west_coast_sw_lon = -124
-west_coast_ne_lat = 46.9
+west_coast_ne_lat = 45.9
 west_coast_ne_lon = -122.2
 
 

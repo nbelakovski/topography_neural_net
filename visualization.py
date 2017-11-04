@@ -10,10 +10,9 @@ import sys
 from data.utils import read_data, interpolate_zeros
 
 
-item_dir = 'sample_data/01824c'
+data_filename = sys.argv[1]
 # Load the matrix containing the original topographical data
-data_filename = [x for x in os.listdir(item_dir) if x[-5:] == ".data"][0]
-z_data = read_data(item_dir + '/' + data_filename)
+z_data = read_data(data_filename)
 interpolate_zeros(z_data)
 # scale matrix down to something that can be reasonably loaded in an html page
 matrix_size = 300

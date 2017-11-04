@@ -83,7 +83,7 @@ def crop(folder_name):
         newfile = glymur.Jp2k('cropped.jp2', data=cropped)
     except Exception as e:
         with open('failed.txt', 'a') as f:
-            f.write(e)
+            f.write(str(e))
         return
 
     with open('cropped', 'w') as f:  # This file indicates success to the pipeline processor

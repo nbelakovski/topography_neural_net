@@ -249,7 +249,7 @@ def main(_):
                                              predictions=y_conv, reduction=tf.losses.Reduction.SUM)
 
     with tf.name_scope('adam_optimizer'):
-        train_step = tf.train.AdamOptimizer(5e-4).minimize(loss)
+        train_step = tf.train.AdamOptimizer(7e-4).minimize(loss)
 
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)

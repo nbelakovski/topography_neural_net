@@ -25,7 +25,7 @@ def main(args):
       x_shape = graph.get_tensor_by_name("shape:0")
       op = graph.get_tensor_by_name("output/final_op:0")
 
-      jp2_filename = 'sample_data/01824c/cropped.jp2'
+      jp2_filename = sys.argv[1]
       jp2_file = glymur.Jp2k(jp2_filename).read()
 
       batch_size = 1
