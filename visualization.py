@@ -15,7 +15,6 @@ item_dir = 'sample_data/01824c'
 data_filename = [x for x in os.listdir(item_dir) if x[-5:] == ".data"][0]
 z_data = read_data(item_dir + '/' + data_filename)
 interpolate_zeros(z_data)
-z_data = z_data[-800:, 0:800]
 # scale matrix down to something that can be reasonably loaded in an html page
 matrix_size = 300
 m = subsample_matrix(z_data, matrix_size)
@@ -23,6 +22,7 @@ m -= m.mean()
 
 # Import the result of inference on the cropped.jp2. This file is created by inference.py
 test = pickle.load(open('test.pickle', 'rb'))
+test = numpy.flipud(test)
 test -= 1
 test *= 2
 test *= 600000

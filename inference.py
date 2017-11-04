@@ -21,30 +21,22 @@ def main(args):
       saver = tf.train.import_meta_graph(meta_name)
       saver.restore(sess, tf.train.latest_checkpoint(model_directory))
       graph = tf.get_default_graph()
-      # print(graph.get_operations())
-      for i in graph.get_operations():
-        print(i)
       x = graph.get_tensor_by_name("input:0")
+      x_shape = graph.get_tensor_by_name("shape:0")
       op = graph.get_tensor_by_name("output/final_op:0")
-      op2 = graph.get_tensor_by_name("conv4/Relu:0")
-      #op2 = graph.get_tensor_by_name("pool3/MaxPool:0")
 
       jp2_filename = 'sample_data/01824c/cropped.jp2'
-      jp2_file = glymur.Jp2k(jp2_filename)
-      data = jp2_file[0:800, 0:800, :]
+      jp2_file = glymur.Jp2k(jp2_filename).read()
 
-      batch_size = 4
-      input_array = [data for x in range(batch_size)]
-      feed_dict1 = {x: input_array}
+      batch_size = 1
+      input_array = [jp2_file for x in range(batch_size)]
+      feed_dict1 = {x: input_array, x_shape: jp2_file.shape[:2]}
 
       print("Running session")
       out = sess.run(op, feed_dict=feed_dict1)
       print(out[0])
       print(out[0].dtype)
       print(np.count_nonzero(out[0]))
-      print(np.count_nonzero(out[1]))
-      print(np.count_nonzero(out[2]))
-      print(np.count_nonzero(out[3]))
       pickle.dump(out[0], open('test.pickle', 'wb'))
 
 
