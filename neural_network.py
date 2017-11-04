@@ -27,7 +27,7 @@ from time import sleep
 from math import gcd
 from random import random
 from data.subsample_matrix import subsample_matrix
-from data.utils import read_data
+from data.utils import read_data, interpolate_zeros
 import threading
 from multiprocessing import Queue, Process
 from random import random
@@ -35,9 +35,9 @@ from random import random
 FLAGS = None
 
 input_size = 800
-batch_size = 5
+batch_size = 4
 # Set up a Queue for asynchronously loading the data
-training_data_queue = Queue(500)
+training_data_queue = Queue(400)
 
 
 def deepnn(x):
@@ -53,8 +53,8 @@ def deepnn(x):
 
     # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
-        w_conv1 = weight_variable([3, 3, 3, 50])
-        b_conv1 = bias_variable([50])
+        w_conv1 = weight_variable([5, 5, 3, 100])
+        b_conv1 = bias_variable([100])
         temp = conv2d(x, w_conv1)
         h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
         tf.summary.histogram('histogram', h_conv1)
@@ -65,8 +65,8 @@ def deepnn(x):
 
     # Second convolutional layer
     with tf.name_scope('conv2'):
-        w_conv2 = weight_variable([3, 3, 50, 50])
-        b_conv2 = bias_variable([50])
+        w_conv2 = weight_variable([5, 5, 100, 75])
+        b_conv2 = bias_variable([75])
         h_conv2 = tf.nn.relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
     # Second pooling layer.
@@ -75,7 +75,7 @@ def deepnn(x):
 
     # Third convolutional layer
     with tf.name_scope('conv3'):
-        w_conv3 = weight_variable([3, 3, 50, 50])
+        w_conv3 = weight_variable([5, 5, 75, 50])
         b_conv3 = bias_variable([50])
         h_conv3 = tf.nn.relu(conv2d(h_pool2, w_conv3) + b_conv3)
 
@@ -97,21 +97,21 @@ def deepnn(x):
     final_pool_dim = h_pool4.shape.dims[1].value
     with tf.name_scope('deconv1'):
         stride1 = 2
-        w_deconv1 = weight_variable([3, 3, 25, 50])  # height, width, out channels, in channels
+        w_deconv1 = weight_variable([5, 5, 25, 50])  # height, width, out channels, in channels
         out_shape = [batch_size, final_pool_dim * stride1, final_pool_dim * stride1, 25]
         h_deconv1 = tf.nn.relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
     # Second deconvolutional layer
     with tf.name_scope('deconv2'):
         stride2 = 2
-        w_deconv2 = weight_variable([3, 3, 10, 25])
+        w_deconv2 = weight_variable([5, 5, 10, 25])
         out_shape = [batch_size, final_pool_dim * stride1 * stride2, final_pool_dim * stride1 * stride2, 10]
         h_deconv2 = tf.nn.relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
     # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
-        w_deconv3 = weight_variable([3, 3, 1, 10])
+        w_deconv3 = weight_variable([4, 4, 1, 10])
         out_shape = [batch_size, final_pool_dim * stride1 * stride2 * stride3,
                      final_pool_dim * stride1 * stride2 * stride3, 1]
         deepnn.output_size = final_pool_dim * stride1 * stride2 * stride3
@@ -165,14 +165,21 @@ def bias_variable(shape):
 def import_data_file(directory, type='completed'):
     topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, type, directory)) if x[-5:] == '.data'][0]
     data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
+    interpolate_zeros(data)
+    if data[0][0] == -999:
+        print("Detected datafile with bad row in", directory)
     data = numpy.flipud(data) # flip it around so that the data points match the pixel layout
     # crop the data as appropriate
     data = data[0:input_size, 0:input_size]
     reduced_data = subsample_matrix(data, deepnn.output_size)
+    # Interpolate any remaining zeros. The error term from zero's has a big impact on learning
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
     # relative topography. It's also helpful that it's a fast operation
     reduced_data -= reduced_data.mean()
+    reduced_data /= 600000  # this number came from an analysis of the entire set. goal is normalization, i.e. get the data in a range from -1 to 1
+    reduced_data /= 2 # this gets the data set into a range of -0.5 to 0.5, roughly
+    reduced_data += 1 # This should guarantee that all out data is >0, i.e. within the range of a relu unit
     del data
     return reduced_data
 
@@ -222,11 +229,11 @@ def main(_):
     y_ = tf.placeholder(tf.float32, [None, deepnn.output_size, deepnn.output_size])
 
     with tf.name_scope('loss'):
-        mean_squared_e = tf.losses.mean_squared_error(labels=y_,
-                                                      predictions=y_conv)
+        loss = tf.losses.mean_squared_error(labels=y_,
+                                             predictions=y_conv, reduction=tf.losses.Reduction.SUM)
 
     with tf.name_scope('adam_optimizer'):
-        train_step = tf.train.AdamOptimizer(1e-4).minimize(mean_squared_e)
+        train_step = tf.train.AdamOptimizer(5e-4).minimize(loss)
 
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)
@@ -294,10 +301,6 @@ def main(_):
             print("Initializing global variables...done")
 
         for epoch in range(11000):
-            print("Building up data queue")
-            while training_data_queue.full() == False:
-                sleep(2)
-                print(training_data_queue.qsize())
             print("Running epoch", epoch)
             # Run training through the entire data set. Reaching the end of the dataset will be indicated by the thread
             # stopping and the queue getting emptied
@@ -318,6 +321,11 @@ def main(_):
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...done")
                 train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
                 sys.stdout.flush()
+                if(batch_number % 200 == 0):
+                    train_accuracy = loss.eval(feed_dict={
+                        x: evaluation_batch['images'], y_: evaluation_batch['topographies']})
+                    print('epoch %d, batch_number %d, training accuracy %g' % (epoch, batch_number, train_accuracy))
+
                 # not sure if Python garbage collector is lagging behind or something, but this thing seems to take up
                 # a lot more RAM than I think it should. I'll manually delete data here to try to avoid eating up all RAM
                 del training_batch
@@ -342,7 +350,7 @@ def main(_):
             # training_data_thread = threading.Thread(target=enqueue, args=[training_directories, training_data_queue])
             # training_data_thread.start()
             print("Evaluating training accuracy after:")
-            train_accuracy = mean_squared_e.eval(feed_dict={
+            train_accuracy = loss.eval(feed_dict={
                 x: evaluation_batch['images'], y_: evaluation_batch['topographies']})
             print('epoch %d, training accuracy %g' % (epoch, train_accuracy))
             del train_accuracy

@@ -41,7 +41,7 @@ def crop(folder_name):
         with open('lidar_oob','w') as f:  # make a separate empty file to make it easier to see the cause of failure upon manual investigation
             f.write('')
         return
-
+    
     # b)
     dx1 = image_points[2] - image_points[0]
     dx2 = lidar_points[0] - image_points[0]
@@ -76,20 +76,18 @@ def crop(folder_name):
     # since the net needs a consistent input shape, but we'll deal with that after trying a few more
 
     # d)
-    cropped = jp2_file[newheight1:newheight2, newwidth1:newwidth2, :]
-    newfile = glymur.Jp2k('cropped.jp2', data=cropped)
+    cropped = jp2_file[newheight1:newheight2, newwidth1:newwidth2, :3]  # only get the first 3 channels, no need for alpha
+    print(jp2_file.shape)
+    print(cropped.shape)
+    try:
+        newfile = glymur.Jp2k('cropped.jp2', data=cropped)
+    except Exception as e:
+        with open('failed.txt', 'a') as f:
+            f.write(e)
+        return
 
-    # Lastly, check the shape against what we consider to be standard. The standard was determined after initially
-    # getting some data and seeing that most had the same shape, but some had really different ones. We'll allow 5%
-    # deviation
-    channels_outofbounds = (newfile.shape[2] != 3)  # There was actually one image with 4 channels
-    if channels_outofbounds:
-        with open('failed.txt', 'w') as f:
-            mystr = "Shape out of bounds, %d %d %d\n" % tuple(newfile.shape)
-            f.write(mystr)
-    else:
-        with open('cropped', 'w') as f:  # This file indicates success to the pipeline processor
-            f.write('%d,%d,%d' % tuple(newfile.shape))
+    with open('cropped', 'w') as f:  # This file indicates success to the pipeline processor
+        f.write('%d,%d,%d' % tuple(newfile.shape))
 
 
 with open(sys.argv[1], 'r') as f:

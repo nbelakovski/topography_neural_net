@@ -34,6 +34,8 @@ void interpolate_zeros(pybind11::array_t<int> & matrix)
         if (start_col == 0 && end_col == -1)
         {
           std::cerr << "Entire row is blank. Fucking off..." << std::endl;
+          int * data = static_cast<int*>(matrix.mutable_data(0, 0));
+          *data = -999;
           return;
         }
         else if (start_col == 0)
