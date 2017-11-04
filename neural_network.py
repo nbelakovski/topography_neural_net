@@ -17,14 +17,15 @@
 """
 
 import argparse
-import numpy
+import numpy as np
 import sys
 import tempfile
 import glymur
 import tensorflow as tf
 import os
+import skimage.measure
 from time import sleep
-from math import gcd
+from math import ceil, gcd
 from random import random
 from data.subsample_matrix import subsample_matrix
 from data.utils import read_data, interpolate_zeros
@@ -34,13 +35,13 @@ from random import random
 
 FLAGS = None
 
-input_size = 800
-batch_size = 4
+max_input_size = 1600
+batch_size = 1
 # Set up a Queue for asynchronously loading the data
 training_data_queue = Queue(400)
 
 
-def deepnn(x):
+def deepnn(x, x_shape):
     """deepnn builds the graph for a deep net for determining topography from image data.
 
   Args:
@@ -94,33 +95,39 @@ def deepnn(x):
         h_pool4 = max_pool_2x2(h_conv4)
 
     # First deconvolution layer. Upsample the last pooling layer and halve the number of feature maps
-    final_pool_dim = h_pool4.shape.dims[1].value
+    # final_pool_dim = h_pool4.shape.dims[1].value
+    print(h_pool4.shape.dims)
+    print(x_shape[0])
+    deepnn.n_conv_layers = 4
+    deconv_1_x = tf.cast(tf.ceil(tf.div(x_shape[0] , (2 * deepnn.n_conv_layers))), tf.int32)
+    deconv_1_y = tf.cast(tf.ceil(tf.div(x_shape[1] , (2 * deepnn.n_conv_layers))), tf.int32)
     with tf.name_scope('deconv1'):
         stride1 = 2
         w_deconv1 = weight_variable([5, 5, 25, 50])  # height, width, out channels, in channels
-        out_shape = [batch_size, final_pool_dim * stride1, final_pool_dim * stride1, 25]
+        out_shape = [batch_size, deconv_1_x, deconv_1_y, 25]
         h_deconv1 = tf.nn.relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
     # Second deconvolutional layer
     with tf.name_scope('deconv2'):
         stride2 = 2
         w_deconv2 = weight_variable([5, 5, 10, 25])
-        out_shape = [batch_size, final_pool_dim * stride1 * stride2, final_pool_dim * stride1 * stride2, 10]
+        out_shape = [batch_size, deconv_1_x * stride2, deconv_1_y * stride2, 10]
         h_deconv2 = tf.nn.relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
     # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
         w_deconv3 = weight_variable([4, 4, 1, 10])
-        out_shape = [batch_size, final_pool_dim * stride1 * stride2 * stride3,
-                     final_pool_dim * stride1 * stride2 * stride3, 1]
-        deepnn.output_size = final_pool_dim * stride1 * stride2 * stride3
-        h_deconv3 = tf.nn.relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
+        out_shape = [batch_size, deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3, 1]
+        h_deconv3 = tf.nn.relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]), name="prefinal_op")
 
+    final_size = (deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3)
+    deepnn.n_deconv_layers = 3
     with tf.name_scope('output'):
         # For use in the loss function, and in the inference script, rearrange the last layer to remove batch size and
         # the reference to the single channel
-        y_conv = tf.reshape(h_deconv3, [-1, deepnn.output_size, deepnn.output_size], name="final_op")
+        # y_conv = tf.reshape(h_deconv3, [-1, deepnn.output_size, deepnn.output_size], name="final_op")
+        y_conv = tf.reshape(h_deconv3, [-1, final_size[0], final_size[1]], name="final_op")
     return y_conv
 
 
@@ -162,20 +169,29 @@ def bias_variable(shape):
     return tf.Variable(initial)
 
 
+def calc_newshape(shape):
+    newx = min(shape[0] - (shape[0] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    newy = min(shape[1] - (shape[1] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    return (newx, newy)
+
+
 def import_data_file(directory, type='completed'):
     topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, type, directory)) if x[-5:] == '.data'][0]
     data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
     interpolate_zeros(data)
     if data[0][0] == -999:
         print("Detected datafile with bad row in", directory)
-    data = numpy.flipud(data) # flip it around so that the data points match the pixel layout
+    data = np.flipud(data) # flip it around so that the data points match the pixel layout
     # crop the data as appropriate
-    data = data[0:input_size, 0:input_size]
-    reduced_data = subsample_matrix(data, deepnn.output_size)
-    # Interpolate any remaining zeros. The error term from zero's has a big impact on learning
+    newx, newy = calc_newshape(data.shape)
+    data = data[0:newx, 0:newy]
+    # reduced_data = subsample_matrix(data, 400)
+    reduced_data = skimage.measure.block_reduce(data, block_size=(2,2), func=np.max) # max pool down to half size
+    print("shapes:", reduced_data.shape, "|", data.shape)
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
     # relative topography. It's also helpful that it's a fast operation
+    reduced_data = reduced_data.astype(float)
     reduced_data -= reduced_data.mean()
     reduced_data /= 600000  # this number came from an analysis of the entire set. goal is normalization, i.e. get the data in a range from -1 to 1
     reduced_data /= 2 # this gets the data set into a range of -0.5 to 0.5, roughly
@@ -199,34 +215,34 @@ def enqueue(directories):
     for d in directories:
         # load the jp2 file
         jp2_filename = os.path.join(FLAGS.data_dir, 'completed', d, 'cropped.jp2')
-        jp2_file = glymur.Jp2k(jp2_filename)
-        jp2_file = jp2_file[0:input_size, 0:input_size, :]
+        jp2_file = glymur.Jp2k(jp2_filename).read()
+        newx, newy = calc_newshape(jp2_file.shape)
+        jp2_file = jp2_file[0:newx, 0:newy, :]
         data_file = import_data_file(d)
         training_data_queue.put({'image':jp2_file, 'topography': data_file}, block=True)
 
 
 def get_useful_directories():
     data_directories = os.listdir(FLAGS.data_dir + '/completed')
-    def shape_ok(d):
+    '''def shape_ok(d):
         with open(FLAGS.data_dir + '/completed/' + d + '/cropped', 'r') as f:
             shape = [int(x) for x in f.readline().split(',')]
-            if shape[0] < input_size or shape[1] < input_size:
-                return False
-        return True
-    data_directories = [x for x in data_directories if shape_ok(x)]
+    TODO: group results by shape (really, by shape -= shape % pow(2,deepnn.n_conv_layers)
+    data_directories = [x for x in data_directories if shape_ok(x)]'''
     return data_directories
 
 
 def main(_):
     # Create the model
-    x = tf.placeholder(tf.float32, [None, input_size, input_size, 3], name="input")
+    x = tf.placeholder(tf.float32, [batch_size, None, None, 3], name="input")
+    x_shape = tf.placeholder(tf.float32, [2], name="shape")
 
     # Build the graph for the deep net
-    y_conv = deepnn(x)
-    print("Output size:", deepnn.output_size)
+    y_conv = deepnn(x, x_shape)
+    #print("Output size:", deepnn.output_size)
 
     # Define loss and optimizer
-    y_ = tf.placeholder(tf.float32, [None, deepnn.output_size, deepnn.output_size])
+    y_ = tf.placeholder(tf.float32, [None, None, None])
 
     with tf.name_scope('loss'):
         loss = tf.losses.mean_squared_error(labels=y_,
@@ -266,7 +282,9 @@ def main(_):
     dirs = os.listdir(FLAGS.data_dir + '/evaluation')
     for d in dirs:
         jp2_filename = os.path.join(FLAGS.data_dir, 'evaluation', d, 'cropped.jp2')
-        jp2_file = glymur.Jp2k(jp2_filename)[0:input_size, 0:input_size, :]
+        jp2_file = glymur.Jp2k(jp2_filename).read()
+        newx, newy = calc_newshape(jp2_file.shape)
+        jp2_file = jp2_file[0:newx, 0:newy, :]
         data_file = import_data_file(d, 'evaluation')
         evaluation_batch['images'].append(jp2_file)
         evaluation_batch['topographies'].append(data_file)
@@ -316,14 +334,16 @@ def main(_):
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...")
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
-                sess.run([train_step], feed_dict={x: training_batch['images'], y_: training_batch['topographies']},
+                print(training_batch['images'][0].shape)
+                print(training_batch['topographies'][0].shape)
+                sess.run([train_step], feed_dict={x: training_batch['images'], x_shape: training_batch['images'][0].shape[:2], y_: training_batch['topographies']},
                          options=run_options, run_metadata=run_metadata)
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...done")
                 train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
                 sys.stdout.flush()
                 if(batch_number % 200 == 0):
                     train_accuracy = loss.eval(feed_dict={
-                        x: evaluation_batch['images'], y_: evaluation_batch['topographies']})
+                        x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies']})
                     print('epoch %d, batch_number %d, training accuracy %g' % (epoch, batch_number, train_accuracy))
 
                 # not sure if Python garbage collector is lagging behind or something, but this thing seems to take up
@@ -351,7 +371,7 @@ def main(_):
             # training_data_thread.start()
             print("Evaluating training accuracy after:")
             train_accuracy = loss.eval(feed_dict={
-                x: evaluation_batch['images'], y_: evaluation_batch['topographies']})
+                x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies']})
             print('epoch %d, training accuracy %g' % (epoch, train_accuracy))
             del train_accuracy
             saver.save(sess, model_path)
