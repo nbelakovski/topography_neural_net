@@ -17,6 +17,7 @@
 """
 
 import argparse
+import pickle
 import numpy as np
 import sys
 import tempfile
@@ -29,16 +30,18 @@ from math import ceil, gcd
 from random import random
 from data.subsample_matrix import subsample_matrix
 from data.utils import read_data, interpolate_zeros
-import threading
-from multiprocessing import Queue, Process
+from multiprocessing import Queue, Process, Manager
+import queue
 from random import random
 
 FLAGS = None
 
 max_input_size = 1600
-batch_size = 1
+input_size = 704
+border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
+batch_size = 5
 # Set up a Queue for asynchronously loading the data
-training_data_queue = Queue(400)
+training_data_queue = Manager().Queue(400)
 
 
 def deepnn(x, x_shape):
@@ -54,7 +57,7 @@ def deepnn(x, x_shape):
 
     # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
-        w_conv1 = weight_variable([5, 5, 3, 100])
+        w_conv1 = weight_variable([8, 8, 3, 100])
         b_conv1 = bias_variable([100])
         temp = conv2d(x, w_conv1)
         h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
@@ -66,7 +69,7 @@ def deepnn(x, x_shape):
 
     # Second convolutional layer
     with tf.name_scope('conv2'):
-        w_conv2 = weight_variable([5, 5, 100, 75])
+        w_conv2 = weight_variable([7, 7, 100, 75])
         b_conv2 = bias_variable([75])
         h_conv2 = tf.nn.relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
@@ -86,7 +89,7 @@ def deepnn(x, x_shape):
 
     # Fourth convolutional layer
     with tf.name_scope('conv4'):
-        w_conv4 = weight_variable([3, 3, 50, 50])
+        w_conv4 = weight_variable([5, 5, 50, 50])
         b_conv4 = bias_variable([50])
         h_conv4 = tf.nn.relu(conv2d(h_pool3, w_conv4) + b_conv4)
 
@@ -103,7 +106,7 @@ def deepnn(x, x_shape):
     deconv_1_y = tf.cast(tf.ceil(tf.div(x_shape[1] , (2 * deepnn.n_conv_layers))), tf.int32)
     with tf.name_scope('deconv1'):
         stride1 = 2
-        w_deconv1 = weight_variable([5, 5, 25, 50])  # height, width, out channels, in channels
+        w_deconv1 = weight_variable([6, 6, 25, 50])  # height, width, out channels, in channels
         out_shape = [batch_size, deconv_1_x, deconv_1_y, 25]
         h_deconv1 = tf.nn.relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
@@ -170,65 +173,87 @@ def bias_variable(shape):
 
 
 def calc_newshape(shape):
-    newx = min(shape[0] - (shape[0] % pow(2, deepnn.n_conv_layers)), max_input_size)
-    newy = min(shape[1] - (shape[1] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    newx = input_size # min(shape[0] - (shape[0] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    newy = input_size # min(shape[1] - (shape[1] % pow(2, deepnn.n_conv_layers)), max_input_size)
     return (newx, newy)
 
 
 def import_data_file(directory, type='completed'):
     topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, type, directory)) if x[-5:] == '.data'][0]
     data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
+    if any(dimension < ((border_trim * 2) * 1.5) for dimension in data.shape):
+       del data
+       return None
+    data = data[border_trim:-border_trim, border_trim:-border_trim]
     interpolate_zeros(data)
     if data[0][0] == -999:
         print("Detected datafile with bad row in", directory)
+        del data
+        return None
     data = np.flipud(data) # flip it around so that the data points match the pixel layout
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
     data = data[0:newx, 0:newy]
-    # reduced_data = subsample_matrix(data, 400)
     reduced_data = skimage.measure.block_reduce(data, block_size=(2,2), func=np.max) # max pool down to half size
-    print("shapes:", reduced_data.shape, "|", data.shape)
+    '''if not os.path.exists('topo.pickle')
+        pickle.dump(reduced_data, 'topo.pickle')
+        with open('tmp','w') as f:
+            f.write(directory)
+    '''
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
     # relative topography. It's also helpful that it's a fast operation
     reduced_data = reduced_data.astype(float)
     reduced_data -= reduced_data.mean()
-    reduced_data /= 600000  # this number came from an analysis of the entire set. goal is normalization, i.e. get the data in a range from -1 to 1
+    normalization_factor = 600000  # this number came from an analysis of the entire set. goal is normalization, i.e. get the data in a range from -1 to 1
+    '''
+    if reduced_data.max() > normalization_factor:
+        del data
+        return None
+    '''
+    reduced_data /= normalization_factor
     reduced_data /= 2 # this gets the data set into a range of -0.5 to 0.5, roughly
     reduced_data += 1 # This should guarantee that all out data is >0, i.e. within the range of a relu unit
     del data
     return reduced_data
 
 
-def import_data_files(directories):
-    topography_data = []
-    for i, directory in enumerate(directories):
-        topography_data.append(import_data_file(directory))
-        if i % 25 == 0:
-            print("Processed", i, "data files")
-    return topography_data
+def import_jp2_file(directory, type='completed'):
+    jp2_filename = os.path.join(FLAGS.data_dir, type, directory, 'cropped.jp2')
+    try:
+        jp2_file = glymur.Jp2k(jp2_filename).read()
+        if any(dimension < ((border_trim * 2) * 1.5) for dimension in jp2_file.shape[:2]):
+           del jp2_file
+           return None
+        jp2_file = jp2_file[border_trim:-border_trim, border_trim:-border_trim, :]
+        newx, newy = calc_newshape(jp2_file.shape)
+        jp2_file = jp2_file[0:newx, 0:newy, :]
+    except:
+        jp2_file = None
+    return jp2_file
 
 
-def enqueue(directories):
+def enqueue(directories, q):
     sys.stdout = open(str(os.getpid()) + '.out', 'w')
     sys.stderr = open(str(os.getpid()) + '.err', 'w')
     for d in directories:
-        # load the jp2 file
-        jp2_filename = os.path.join(FLAGS.data_dir, 'completed', d, 'cropped.jp2')
-        jp2_file = glymur.Jp2k(jp2_filename).read()
-        newx, newy = calc_newshape(jp2_file.shape)
-        jp2_file = jp2_file[0:newx, 0:newy, :]
+        jp2_file = import_jp2_file(d)
         data_file = import_data_file(d)
-        training_data_queue.put({'image':jp2_file, 'topography': data_file}, block=True)
+        if data_file is not None and jp2_file is not None:
+            q.put({'image':jp2_file, 'topography': data_file}, block=True)
+    q.close()
+    q.join_thread()
+    print(os.getpid(), "is done with queueing")
 
 
-def get_useful_directories():
-    data_directories = os.listdir(FLAGS.data_dir + '/completed')
-    '''def shape_ok(d):
-        with open(FLAGS.data_dir + '/completed/' + d + '/cropped', 'r') as f:
+def get_useful_directories(type='completed'):
+    data_directories = os.listdir(FLAGS.data_dir + '/' + type)
+    def shape_ok(d):
+        with open(FLAGS.data_dir + '/' + type + '/' + d + '/cropped', 'r') as f:
             shape = [int(x) for x in f.readline().split(',')]
-    TODO: group results by shape (really, by shape -= shape % pow(2,deepnn.n_conv_layers)
-    data_directories = [x for x in data_directories if shape_ok(x)]'''
+            return all(x > input_size + 2* border_trim for x in shape[:2])
+    # TODO: group results by shape (really, by shape -= shape % pow(2,deepnn.n_conv_layers)
+    data_directories = [x for x in data_directories if shape_ok(x)]
     return data_directories
 
 
@@ -249,7 +274,7 @@ def main(_):
                                              predictions=y_conv, reduction=tf.losses.Reduction.SUM)
 
     with tf.name_scope('adam_optimizer'):
-        train_step = tf.train.AdamOptimizer(7e-4).minimize(loss)
+        train_step = tf.train.AdamOptimizer(learning_rate=1e-3,beta2=0.98, epsilon=1e-16).minimize(loss)
 
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)
@@ -262,15 +287,16 @@ def main(_):
     # Break off some of these directories into a separate test set
     total_data = len(data_directories)
     # also want to ensure that the total data is evenly divisible by number of batches and processes
-    num_processes = 6  # number of processes used to populate the queue
+    num_processes = 5  # number of processes used to populate the queue
     def lcm(a, b):
         return int((a*b) / gcd(a, b))
     total_data -= total_data % lcm(batch_size, num_processes)
     print(total_data)
     training_directories = data_directories[0:total_data]
+    training_directories.sort(key= lambda x: random())  # x is unused, this is for shuffling
 
     chunk_size = int(len(training_directories) / num_processes)
-    args = [[training_directories[i:i+chunk_size]] for i in range(0, len(training_directories), chunk_size)]
+    args = [[training_directories[i:i+chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
     processes = []
     for arg in args:
         p = Process(target=enqueue, args=arg)
@@ -279,19 +305,18 @@ def main(_):
 
     # grab batch_size items out of the queue to have them for the periodic accuracy evaluation
     evaluation_batch = {'images': [], 'topographies': []}
-    dirs = os.listdir(FLAGS.data_dir + '/evaluation')
+    dirs = get_useful_directories('evaluation')
     for d in dirs:
-        jp2_filename = os.path.join(FLAGS.data_dir, 'evaluation', d, 'cropped.jp2')
-        jp2_file = glymur.Jp2k(jp2_filename).read()
-        newx, newy = calc_newshape(jp2_file.shape)
-        jp2_file = jp2_file[0:newx, 0:newy, :]
+        jp2_file = import_jp2_file(d, 'evaluation')
         data_file = import_data_file(d, 'evaluation')
-        evaluation_batch['images'].append(jp2_file)
-        evaluation_batch['topographies'].append(data_file)
-        if len(evaluation_batch['images']) == batch_size:
-            break
-
-
+        if jp2_file is not None and data_file is not None and len(evaluation_batch['images']) < batch_size:
+            evaluation_batch['images'].append(jp2_file)
+            evaluation_batch['topographies'].append(data_file)
+            if not os.path.exists('sample_data.pickle'):
+                pickle.dump(data_file, open('sample_data.pickle', 'wb'))
+            if not os.path.exists('temp-plot.jp2'):
+                glymur.Jp2k('temp-plot.jp2', data=jp2_file)
+    print("evaluation size:", len(evaluation_batch['images']))
 
     # Set up the code to save the network and its parameters
     saver = tf.train.Saver()
@@ -305,6 +330,7 @@ def main(_):
     # of having it allocate all the GPU memory, which is what it does by default
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
+    accuracy_log = open('accuracy.log', 'a')
 
     with tf.Session(config=config) as sess:
         # Try importing the model and loading the last checkpoint, if possible. Otherwise initialize from scratch
@@ -318,6 +344,37 @@ def main(_):
             sess.run(tf.global_variables_initializer())
             print("Initializing global variables...done")
 
+
+        def evaluate(epoch, batch_number):
+            train_accuracy = loss.eval(feed_dict={
+                    x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies']})
+            print('epoch %d, batch_number %d, training accuracy %g' % (epoch, batch_number, train_accuracy))
+            accuracy_log.write('epoch %d, batch_number %d, training accuracy %g\n' % (epoch, batch_number, train_accuracy))
+            accuracy_log.flush()
+
+
+        def save():
+            saver.save(sess, model_path)
+            saver.save(sess, backup_path)
+
+
+        def get_training_batch():
+            training_batch = {'images': [], 'topographies': []}
+            for i in range(batch_size):
+                try:
+                    training_data = training_data_queue.get(block=False)
+                except queue.Empty as qe:
+                    print("Queue is empty")
+                    print([p.is_alive() for p in processes])
+                    continue
+                except:
+                    print("Failed to get data from queue")
+                    continue
+                training_batch['images'].append(training_data['image'])
+                training_batch['topographies'].append(training_data['topography'])
+            return training_batch if len(training_batch['images']) == batch_size else None
+
+
         for epoch in range(11000):
             print("Running epoch", epoch)
             # Run training through the entire data set. Reaching the end of the dataset will be indicated by the thread
@@ -325,12 +382,11 @@ def main(_):
             batch_number = 0
             while (True in [p.is_alive() for p in processes]) or training_data_queue.empty() == False:
                 print("Creating batch... (queue size is", training_data_queue.qsize(),")")
-                training_batch = {'images': [], 'topographies': []}
-                for i in range(batch_size):
-                    training_data = training_data_queue.get()
-                    training_batch['images'].append(training_data['image'])
-                    training_batch['topographies'].append(training_data['topography'])
-                print("Creating batch...done. Data point:",training_batch['topographies'][0][10][10])
+                training_batch = get_training_batch()
+                if training_batch is None:
+                    print("Couldn't get training batch")
+                    continue
+                print("Creating batch...done. Data point:",training_batch['topographies'][0][1][1])
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...")
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
@@ -341,10 +397,9 @@ def main(_):
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...done")
                 train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
                 sys.stdout.flush()
-                if(batch_number % 200 == 0):
-                    train_accuracy = loss.eval(feed_dict={
-                        x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies']})
-                    print('epoch %d, batch_number %d, training accuracy %g' % (epoch, batch_number, train_accuracy))
+                if(batch_number % 40 == 0):
+                    evaluate(epoch, batch_number)
+                    save()
 
                 # not sure if Python garbage collector is lagging behind or something, but this thing seems to take up
                 # a lot more RAM than I think it should. I'll manually delete data here to try to avoid eating up all RAM
@@ -353,7 +408,7 @@ def main(_):
                 del run_metadata
                 batch_number += 1
             for p in processes:
-                p.terminate()
+                p.join()
             processes.clear()
             # Now shuffle training directories and restart the thread
             data_directories = get_useful_directories()
@@ -362,24 +417,11 @@ def main(_):
             training_directories = data_directories[0:total_data]
             chunk_size = int(len(training_directories) / num_processes)
             training_directories.sort(key= lambda x: random())  # x is unused
-            args = [[training_directories[i:i + chunk_size]] for i in range(0, len(training_directories), chunk_size)]
+            args = [[training_directories[i:i + chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
             for arg in args:
                 p = Process(target=enqueue, args=arg)
                 p.start()
                 processes.append(p)
-            # training_data_thread = threading.Thread(target=enqueue, args=[training_directories, training_data_queue])
-            # training_data_thread.start()
-            print("Evaluating training accuracy after:")
-            train_accuracy = loss.eval(feed_dict={
-                x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies']})
-            print('epoch %d, training accuracy %g' % (epoch, train_accuracy))
-            del train_accuracy
-            saver.save(sess, model_path)
-            saver.save(sess, backup_path)
-
-        saver.save(sess, model_path)
-        # print('test accuracy %g' % mean_squared_e.eval(feed_dict={
-            # x: test_images, y_: test_topo}))
 
 
 if __name__ == '__main__':

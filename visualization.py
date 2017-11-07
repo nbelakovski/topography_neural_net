@@ -2,25 +2,31 @@
 import pickle
 import os
 import plotly.offline as po
+import skimage.measure
 import plotly.tools as pt
 import plotly.graph_objs as go
 import numpy
+import numpy as np
 from data.subsample_matrix import subsample_matrix
 import sys
 from data.utils import read_data, interpolate_zeros
 
-
+border_trim = 1
 data_filename = sys.argv[1]
 # Load the matrix containing the original topographical data
 z_data = read_data(data_filename)
+z_data = z_data[border_trim:-border_trim, border_trim:-border_trim]
 interpolate_zeros(z_data)
+z_data = numpy.flipud(z_data)
+z_data = z_data[0:700:, 0:500]
 # scale matrix down to something that can be reasonably loaded in an html page
 matrix_size = 300
-m = subsample_matrix(z_data, matrix_size)
+m = skimage.measure.block_reduce(z_data, block_size=(2,2), func=np.max) # max pool down to half size
+m = m.astype(float)
 m -= m.mean()
 
 # Import the result of inference on the cropped.jp2. This file is created by inference.py
-test = pickle.load(open('test.pickle', 'rb'))
+test = pickle.load(open('sample_data.pickle', 'rb'))
 test = numpy.flipud(test)
 test -= 1
 test *= 2

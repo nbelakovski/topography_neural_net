@@ -28,7 +28,7 @@ def main(args):
       jp2_filename = sys.argv[1]
       jp2_file = glymur.Jp2k(jp2_filename).read()
 
-      batch_size = 1
+      batch_size = 5
       input_array = [jp2_file for x in range(batch_size)]
       feed_dict1 = {x: input_array, x_shape: jp2_file.shape[:2]}
 
