@@ -27,6 +27,8 @@ def main(args):
 
       jp2_filename = sys.argv[1]
       jp2_file = glymur.Jp2k(jp2_filename).read()
+      jp2_file = jp2_file[100:-100, 100:-100, :]
+      jp2_file = jp2_file[0:704, 0:704, :]
 
       batch_size = 5
       input_array = [jp2_file for x in range(batch_size)]

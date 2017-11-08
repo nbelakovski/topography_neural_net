@@ -41,7 +41,7 @@ input_size = 704
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
 batch_size = 5
 # Set up a Queue for asynchronously loading the data
-training_data_queue = Manager().Queue(400)
+training_data_queue = queue.Queue(400)
 
 
 def deepnn(x, x_shape):
@@ -57,7 +57,7 @@ def deepnn(x, x_shape):
 
     # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
-        w_conv1 = weight_variable([8, 8, 3, 100])
+        w_conv1 = weight_variable([4, 4, 3, 100])
         b_conv1 = bias_variable([100])
         temp = conv2d(x, w_conv1)
         h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
@@ -69,7 +69,7 @@ def deepnn(x, x_shape):
 
     # Second convolutional layer
     with tf.name_scope('conv2'):
-        w_conv2 = weight_variable([7, 7, 100, 75])
+        w_conv2 = weight_variable([4, 4, 100, 75])
         b_conv2 = bias_variable([75])
         h_conv2 = tf.nn.relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
@@ -79,7 +79,7 @@ def deepnn(x, x_shape):
 
     # Third convolutional layer
     with tf.name_scope('conv3'):
-        w_conv3 = weight_variable([5, 5, 75, 50])
+        w_conv3 = weight_variable([4, 4, 75, 50])
         b_conv3 = bias_variable([50])
         h_conv3 = tf.nn.relu(conv2d(h_pool2, w_conv3) + b_conv3)
 
@@ -89,7 +89,7 @@ def deepnn(x, x_shape):
 
     # Fourth convolutional layer
     with tf.name_scope('conv4'):
-        w_conv4 = weight_variable([5, 5, 50, 50])
+        w_conv4 = weight_variable([3, 3, 50, 50])
         b_conv4 = bias_variable([50])
         h_conv4 = tf.nn.relu(conv2d(h_pool3, w_conv4) + b_conv4)
 
@@ -102,8 +102,8 @@ def deepnn(x, x_shape):
     print(h_pool4.shape.dims)
     print(x_shape[0])
     deepnn.n_conv_layers = 4
-    deconv_1_x = tf.cast(tf.ceil(tf.div(x_shape[0] , (2 * deepnn.n_conv_layers))), tf.int32)
-    deconv_1_y = tf.cast(tf.ceil(tf.div(x_shape[1] , (2 * deepnn.n_conv_layers))), tf.int32)
+    deconv_1_x = int(input_size / 8)  #tf.cast(tf.ceil(tf.div(x_shape[0] , (2 * deepnn.n_conv_layers))), tf.int32)
+    deconv_1_y = int(input_size / 8)  #tf.cast(tf.ceil(tf.div(x_shape[1] , (2 * deepnn.n_conv_layers))), tf.int32)
     with tf.name_scope('deconv1'):
         stride1 = 2
         w_deconv1 = weight_variable([6, 6, 25, 50])  # height, width, out channels, in channels
@@ -234,15 +234,13 @@ def import_jp2_file(directory, type='completed'):
 
 
 def enqueue(directories, q):
-    sys.stdout = open(str(os.getpid()) + '.out', 'w')
-    sys.stderr = open(str(os.getpid()) + '.err', 'w')
     for d in directories:
         jp2_file = import_jp2_file(d)
         data_file = import_data_file(d)
         if data_file is not None and jp2_file is not None:
             q.put({'image':jp2_file, 'topography': data_file}, block=True)
-    q.close()
-    q.join_thread()
+        if directories.index(d) % 10 == 0:
+            print(directories.index(d))
     print(os.getpid(), "is done with queueing")
 
 
@@ -259,7 +257,7 @@ def get_useful_directories(type='completed'):
 
 def main(_):
     # Create the model
-    x = tf.placeholder(tf.float32, [batch_size, None, None, 3], name="input")
+    x = tf.placeholder(tf.float32, [batch_size, input_size, input_size, 3], name="input")
     x_shape = tf.placeholder(tf.float32, [2], name="shape")
 
     # Build the graph for the deep net
@@ -274,7 +272,7 @@ def main(_):
                                              predictions=y_conv, reduction=tf.losses.Reduction.SUM)
 
     with tf.name_scope('adam_optimizer'):
-        train_step = tf.train.AdamOptimizer(learning_rate=1e-3,beta2=0.98, epsilon=1e-16).minimize(loss)
+        train_step = tf.train.RMSPropOptimizer(learning_rate=1e-3).minimize(loss)
 
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)
@@ -294,7 +292,10 @@ def main(_):
     print(total_data)
     training_directories = data_directories[0:total_data]
     training_directories.sort(key= lambda x: random())  # x is unused, this is for shuffling
+    training_directories = training_directories[:20]  # limiting this for testing without multiprocessing
 
+    processes = []
+    '''
     chunk_size = int(len(training_directories) / num_processes)
     args = [[training_directories[i:i+chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
     processes = []
@@ -302,6 +303,8 @@ def main(_):
         p = Process(target=enqueue, args=arg)
         p.start()
         processes.append(p)
+    '''
+    enqueue(training_directories, training_data_queue)
 
     # grab batch_size items out of the queue to have them for the periodic accuracy evaluation
     evaluation_batch = {'images': [], 'topographies': []}
@@ -348,8 +351,8 @@ def main(_):
         def evaluate(epoch, batch_number):
             train_accuracy = loss.eval(feed_dict={
                     x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies']})
-            print('epoch %d, batch_number %d, training accuracy %g' % (epoch, batch_number, train_accuracy))
-            accuracy_log.write('epoch %d, batch_number %d, training accuracy %g\n' % (epoch, batch_number, train_accuracy))
+            print('epoch %d, batch_number %d, training accuracy %.12g' % (epoch, batch_number, train_accuracy))
+            accuracy_log.write('epoch %d, batch_number %d, training accuracy %.12g\n' % (epoch, batch_number, train_accuracy))
             accuracy_log.flush()
 
 
@@ -387,6 +390,8 @@ def main(_):
                     print("Couldn't get training batch")
                     continue
                 print("Creating batch...done. Data point:",training_batch['topographies'][0][1][1])
+                print("Creating batch...done. Image point:",training_batch['images'][0][1,1,:])
+                
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...")
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
@@ -417,11 +422,14 @@ def main(_):
             training_directories = data_directories[0:total_data]
             chunk_size = int(len(training_directories) / num_processes)
             training_directories.sort(key= lambda x: random())  # x is unused
+            enqueue(training_directories[:100], training_data_queue)
+            '''
             args = [[training_directories[i:i + chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
             for arg in args:
                 p = Process(target=enqueue, args=arg)
                 p.start()
                 processes.append(p)
+            '''
 
 
 if __name__ == '__main__':
