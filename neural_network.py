@@ -39,7 +39,7 @@ FLAGS = None
 max_input_size = 1600
 input_size = 704
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
-batch_size = 5
+batch_size = 2
 # Set up a Queue for asynchronously loading the data
 training_data_queue = Manager().Queue(400)
 
@@ -57,8 +57,9 @@ def deepnn(x, x_shape):
 
     # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
-        w_conv1 = weight_variable([4, 4, 3, 100])
-        b_conv1 = bias_variable([100])
+        conv1_maps = 250
+        w_conv1 = weight_variable([5, 5, 3, conv1_maps])
+        b_conv1 = bias_variable([conv1_maps])
         temp = conv2d(x, w_conv1)
         h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
         tf.summary.histogram('histogram', h_conv1)
@@ -69,8 +70,9 @@ def deepnn(x, x_shape):
 
     # Second convolutional layer
     with tf.name_scope('conv2'):
-        w_conv2 = weight_variable([4, 4, 100, 75])
-        b_conv2 = bias_variable([75])
+        conv2_maps = 125
+        w_conv2 = weight_variable([5, 5, conv1_maps, conv2_maps])
+        b_conv2 = bias_variable([conv2_maps])
         h_conv2 = tf.nn.relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
     # Second pooling layer.
@@ -79,7 +81,7 @@ def deepnn(x, x_shape):
 
     # Third convolutional layer
     with tf.name_scope('conv3'):
-        w_conv3 = weight_variable([4, 4, 75, 50])
+        w_conv3 = weight_variable([4, 4, conv2_maps, 50])
         b_conv3 = bias_variable([50])
         h_conv3 = tf.nn.relu(conv2d(h_pool2, w_conv3) + b_conv3)
 
