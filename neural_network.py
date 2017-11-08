@@ -41,7 +41,7 @@ input_size = 704
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
 batch_size = 5
 # Set up a Queue for asynchronously loading the data
-training_data_queue = queue.Queue(400)
+training_data_queue = Manager().Queue(400)
 
 
 def deepnn(x, x_shape):
@@ -238,10 +238,10 @@ def enqueue(directories, q):
         jp2_file = import_jp2_file(d)
         data_file = import_data_file(d)
         if data_file is not None and jp2_file is not None:
-            q.put({'image':jp2_file, 'topography': data_file}, block=True)
-        if directories.index(d) % 10 == 0:
-            print(directories.index(d))
-    print(os.getpid(), "is done with queueing")
+            try:
+                q.put({'image':jp2_file, 'topography': data_file}, block=True, timeout=20)
+            except:
+                pass
 
 
 def get_useful_directories(type='completed'):
@@ -285,17 +285,14 @@ def main(_):
     # Break off some of these directories into a separate test set
     total_data = len(data_directories)
     # also want to ensure that the total data is evenly divisible by number of batches and processes
-    num_processes = 5  # number of processes used to populate the queue
+    num_processes = 8  # number of processes used to populate the queue
     def lcm(a, b):
         return int((a*b) / gcd(a, b))
     total_data -= total_data % lcm(batch_size, num_processes)
     print(total_data)
     training_directories = data_directories[0:total_data]
     training_directories.sort(key= lambda x: random())  # x is unused, this is for shuffling
-    training_directories = training_directories[:20]  # limiting this for testing without multiprocessing
 
-    processes = []
-    '''
     chunk_size = int(len(training_directories) / num_processes)
     args = [[training_directories[i:i+chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
     processes = []
@@ -303,8 +300,6 @@ def main(_):
         p = Process(target=enqueue, args=arg)
         p.start()
         processes.append(p)
-    '''
-    enqueue(training_directories, training_data_queue)
 
     # grab batch_size items out of the queue to have them for the periodic accuracy evaluation
     evaluation_batch = {'images': [], 'topographies': []}
@@ -365,7 +360,7 @@ def main(_):
             training_batch = {'images': [], 'topographies': []}
             for i in range(batch_size):
                 try:
-                    training_data = training_data_queue.get(block=False)
+                    training_data = training_data_queue.get(block=True, timeout=20)
                 except queue.Empty as qe:
                     print("Queue is empty")
                     print([p.is_alive() for p in processes])
@@ -391,7 +386,7 @@ def main(_):
                     continue
                 print("Creating batch...done. Data point:",training_batch['topographies'][0][1][1])
                 print("Creating batch...done. Image point:",training_batch['images'][0][1,1,:])
-                
+
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...")
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
@@ -422,14 +417,11 @@ def main(_):
             training_directories = data_directories[0:total_data]
             chunk_size = int(len(training_directories) / num_processes)
             training_directories.sort(key= lambda x: random())  # x is unused
-            enqueue(training_directories[:100], training_data_queue)
-            '''
             args = [[training_directories[i:i + chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
             for arg in args:
                 p = Process(target=enqueue, args=arg)
                 p.start()
                 processes.append(p)
-            '''
 
 
 if __name__ == '__main__':
