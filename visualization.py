@@ -15,11 +15,7 @@ border_trim = 1
 data_filename = sys.argv[1]
 # Load the matrix containing the original topographical data
 z_data = read_data(data_filename)
-z_data = z_data[border_trim:-border_trim, border_trim:-border_trim]
 interpolate_zeros(z_data)
-z_data = numpy.flipud(z_data)
-z_data = z_data[0:704:, 0:704]
-z_data = numpy.flipud(z_data)
 # scale matrix down to something that can be reasonably loaded in an html page
 matrix_size = 300
 m = skimage.measure.block_reduce(z_data, block_size=(2,2), func=np.max) # max pool down to half size

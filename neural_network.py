@@ -37,7 +37,6 @@ from random import random
 FLAGS = None
 
 max_input_size = 1600
-input_size = 704
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
 batch_size = 1
 # Set up a Queue for asynchronously loading the data
@@ -48,12 +47,13 @@ def leaky_relu(x):
     alpha = 0.01
     return tf.maximum(tf.nn.relu(x), alpha * x)
 
-def deepnn(x, x_shape):
+def deepnn(x, x_shape, batch_size_holder):
     """deepnn builds the graph for a deep net for determining topography from image data.
 
   Args:
-    x: an input tensor with the dimensions (N_examples, 1008, 990), where 1008x990 is the
-    number of pixels in the input image.
+    x: input tensor with dimensions [batch_size, x_shape[0], x_shape[1], 3]
+    x_shape: [width, height] of input image
+    batch_size_holder: [batch_size]
 
   Returns:
     A tensor y of shape (output_size, output_size), with values equal to the topography of the input image
@@ -113,17 +113,14 @@ def deepnn(x, x_shape):
         h_pool4 = max_pool_2x2(h_conv4)
 
     # First deconvolution layer. Upsample the last pooling layer and halve the number of feature maps
-    # final_pool_dim = h_pool4.shape.dims[1].value
-    print(h_pool4.shape.dims)
-    print(x_shape[0])
     deepnn.n_conv_layers = 4
-    deconv_1_x = int(input_size / 8)  #tf.cast(tf.ceil(tf.div(x_shape[0] , (2 * deepnn.n_conv_layers))), tf.int32)
-    deconv_1_y = int(input_size / 8)  #tf.cast(tf.ceil(tf.div(x_shape[1] , (2 * deepnn.n_conv_layers))), tf.int32)
+    deconv_1_x = tf.cast(tf.ceil(tf.divide(x_shape[0], (2 * deepnn.n_conv_layers))), tf.int32)
+    deconv_1_y = tf.cast(tf.ceil(tf.divide(x_shape[1], (2 * deepnn.n_conv_layers))), tf.int32)
     with tf.name_scope('deconv1'):
         stride1 = 2
         deconv1_maps = 50
         w_deconv1 = weight_variable([6, 6, deconv1_maps, conv4_maps])  # height, width, out channels, in channels
-        out_shape = [batch_size, deconv_1_x, deconv_1_y, deconv1_maps]
+        out_shape = [batch_size_holder[0], deconv_1_x, deconv_1_y, deconv1_maps]
         h_deconv1 = leaky_relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
     # temp convolutional layer
@@ -138,14 +135,14 @@ def deepnn(x, x_shape):
         stride2 = 2
         deconv2_maps = 25
         w_deconv2 = weight_variable([5, 5, deconv2_maps, conv_deconv_maps])
-        out_shape = [batch_size, deconv_1_x * stride2, deconv_1_y * stride2, deconv2_maps]
+        out_shape = [batch_size_holder[0], deconv_1_x * stride2, deconv_1_y * stride2, deconv2_maps]
         h_deconv2 = leaky_relu(deconv2d(h_conv_deconv, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
     # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
         w_deconv3 = weight_variable([4, 4, 1, deconv2_maps])
-        out_shape = [batch_size, deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3, 1]
+        out_shape = [batch_size_holder[0], deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3, 1]
         h_deconv3 = leaky_relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
 
     final_size = (deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3)
@@ -197,8 +194,8 @@ def bias_variable(shape):
 
 
 def calc_newshape(shape):
-    newx = input_size # min(shape[0] - (shape[0] % pow(2, deepnn.n_conv_layers)), max_input_size)
-    newy = input_size # min(shape[1] - (shape[1] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    newx = min(shape[0] - (shape[0] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    newy = min(shape[1] - (shape[1] % pow(2, deepnn.n_conv_layers)), max_input_size)
     return (newx, newy)
 
 
@@ -279,22 +276,25 @@ def enqueue(directories, q):
 
 def get_useful_directories(type='completed'):
     data_directories = os.listdir(FLAGS.data_dir + '/' + type)
+    '''
     def shape_ok(d):
         with open(FLAGS.data_dir + '/' + type + '/' + d + '/cropped', 'r') as f:
             shape = [int(x) for x in f.readline().split(',')]
             return all(x > input_size + 2* border_trim for x in shape[:2])
     # TODO: group results by shape (really, by shape -= shape % pow(2,deepnn.n_conv_layers)
     data_directories = [x for x in data_directories if shape_ok(x)]
+    '''
     return data_directories
 
 
 def main(_):
     # Create the model
-    x = tf.placeholder(tf.float32, [batch_size, input_size, input_size, 3], name="input")
-    x_shape = tf.placeholder(tf.float32, [2], name="shape")
+    x = tf.placeholder(tf.float32, [None, None, None, 3], name="input")
+    x_shape = tf.placeholder(tf.int32, [2], name="shape")
+    batch_size_holder = tf.placeholder(tf.int32, [1], name="batch_size")
 
     # Build the graph for the deep net
-    y_conv = deepnn(x, x_shape)
+    y_conv = deepnn(x, x_shape, batch_size_holder)
     #print("Output size:", deepnn.output_size)
 
     # Define loss and optimizer
@@ -378,7 +378,7 @@ def main(_):
 
         def evaluate(epoch, batch_number):
             train_accuracy = loss.eval(feed_dict={
-                    x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies']})
+                x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies'], batch_size_holder: [batch_size]})
             print('epoch %d, batch_number %d, training accuracy %.12g' % (epoch, batch_number, train_accuracy))
             accuracy_log.write('epoch %d, batch_number %d, training accuracy %.12g\n' % (epoch, batch_number, train_accuracy))
             accuracy_log.flush()
@@ -425,7 +425,7 @@ def main(_):
                 run_metadata = tf.RunMetadata()
                 print(training_batch['images'][0].shape)
                 print(training_batch['topographies'][0].shape)
-                sess.run([train_step], feed_dict={x: training_batch['images'], x_shape: training_batch['images'][0].shape[:2], y_: training_batch['topographies']},
+                sess.run([train_step], feed_dict={x: training_batch['images'], x_shape: training_batch['images'][0].shape[:2], y_: training_batch['topographies'], batch_size_holder: [batch_size]},
                          options=run_options, run_metadata=run_metadata)
                 print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...done")
                 train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))

@@ -23,16 +23,13 @@ def main(args):
       graph = tf.get_default_graph()
       x = graph.get_tensor_by_name("input:0")
       x_shape = graph.get_tensor_by_name("shape:0")
+      batch_size= graph.get_tensor_by_name("batch_size:0")
       op = graph.get_tensor_by_name("output/final_op:0")
 
       jp2_filename = sys.argv[1]
       jp2_file = glymur.Jp2k(jp2_filename).read()
-      jp2_file = jp2_file[100:-100, 100:-100, :]
-      jp2_file = jp2_file[0:704, 0:704, :]
 
-      batch_size = 1
-      input_array = [jp2_file for x in range(batch_size)]
-      feed_dict1 = {x: input_array, x_shape: jp2_file.shape[:2]}
+      feed_dict1 = {x: [jp2_file], x_shape: jp2_file.shape[:2], batch_size: [1]}
 
       print("Running session")
       out = sess.run(op, feed_dict=feed_dict1)
