@@ -28,6 +28,7 @@ m -= m.mean()
 
 # Import the result of inference on the cropped.jp2. This file is created by inference.py
 test = pickle.load(open('test.pickle', 'rb'))
+test /= 10000
 test -= 1
 test *= 2
 test *= 600000

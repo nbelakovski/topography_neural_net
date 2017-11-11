@@ -39,10 +39,14 @@ FLAGS = None
 max_input_size = 1600
 input_size = 704
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
-batch_size = 2
+batch_size = 1
 # Set up a Queue for asynchronously loading the data
-training_data_queue = Manager().Queue(400)
+training_data_queue = Manager().Queue(1000)
 
+
+def leaky_relu(x):
+    alpha = 0.01
+    return tf.maximum(tf.nn.relu(x), alpha * x)
 
 def deepnn(x, x_shape):
     """deepnn builds the graph for a deep net for determining topography from image data.
@@ -57,11 +61,11 @@ def deepnn(x, x_shape):
 
     # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
-        conv1_maps = 250
+        conv1_maps = 175
         w_conv1 = weight_variable([5, 5, 3, conv1_maps])
         b_conv1 = bias_variable([conv1_maps])
         temp = conv2d(x, w_conv1)
-        h_conv1 = tf.nn.relu(tf.add(temp, b_conv1))
+        h_conv1 = leaky_relu(tf.add(temp, b_conv1))
         tf.summary.histogram('histogram', h_conv1)
 
     # Pooling layer - downsamples.
@@ -70,10 +74,10 @@ def deepnn(x, x_shape):
 
     # Second convolutional layer
     with tf.name_scope('conv2'):
-        conv2_maps = 125
+        conv2_maps = 250
         w_conv2 = weight_variable([5, 5, conv1_maps, conv2_maps])
         b_conv2 = bias_variable([conv2_maps])
-        h_conv2 = tf.nn.relu(conv2d(h_pool1, w_conv2) + b_conv2)
+        h_conv2 = leaky_relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
     # Second pooling layer.
     with tf.name_scope('pool2'):
@@ -81,19 +85,28 @@ def deepnn(x, x_shape):
 
     # Third convolutional layer
     with tf.name_scope('conv3'):
-        w_conv3 = weight_variable([4, 4, conv2_maps, 50])
-        b_conv3 = bias_variable([50])
-        h_conv3 = tf.nn.relu(conv2d(h_pool2, w_conv3) + b_conv3)
+        conv3_maps = 250
+        w_conv3 = weight_variable([4, 4, conv2_maps, conv3_maps])
+        b_conv3 = bias_variable([conv3_maps])
+        h_conv3 = leaky_relu(conv2d(h_pool2, w_conv3) + b_conv3)
+    #
+    # Third convolutional layer
+    with tf.name_scope('conv3.5'):
+        conv35_maps = 125
+        w_conv35 = weight_variable([4, 4, conv3_maps, conv35_maps])
+        b_conv35 = bias_variable([conv35_maps])
+        h_conv35 = leaky_relu(conv2d(h_conv3, w_conv35) + b_conv35)
 
     # Third pooling layer.
     with tf.name_scope('pool3'):
-        h_pool3 = max_pool_2x2(h_conv3)
+        h_pool3 = max_pool_2x2(h_conv35)
 
     # Fourth convolutional layer
     with tf.name_scope('conv4'):
-        w_conv4 = weight_variable([3, 3, 50, 50])
-        b_conv4 = bias_variable([50])
-        h_conv4 = tf.nn.relu(conv2d(h_pool3, w_conv4) + b_conv4)
+        conv4_maps = 100
+        w_conv4 = weight_variable([4, 4, conv35_maps, conv4_maps])
+        b_conv4 = bias_variable([conv4_maps])
+        h_conv4 = leaky_relu(conv2d(h_pool3, w_conv4) + b_conv4)
 
     # Fourth pooling layer.
     with tf.name_scope('pool4'):
@@ -108,23 +121,32 @@ def deepnn(x, x_shape):
     deconv_1_y = int(input_size / 8)  #tf.cast(tf.ceil(tf.div(x_shape[1] , (2 * deepnn.n_conv_layers))), tf.int32)
     with tf.name_scope('deconv1'):
         stride1 = 2
-        w_deconv1 = weight_variable([6, 6, 25, 50])  # height, width, out channels, in channels
-        out_shape = [batch_size, deconv_1_x, deconv_1_y, 25]
-        h_deconv1 = tf.nn.relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
+        deconv1_maps = 50
+        w_deconv1 = weight_variable([6, 6, deconv1_maps, conv4_maps])  # height, width, out channels, in channels
+        out_shape = [batch_size, deconv_1_x, deconv_1_y, deconv1_maps]
+        h_deconv1 = leaky_relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
+
+    # temp convolutional layer
+    with tf.name_scope('conv-deconv'):
+        conv_deconv_maps = 50
+        w_conv_deconv = weight_variable([4, 4, conv_deconv_maps, deconv1_maps])
+        b_conv_deconv = bias_variable([conv_deconv_maps])
+        h_conv_deconv = leaky_relu(conv2d(h_deconv1, w_conv_deconv) + b_conv_deconv)
 
     # Second deconvolutional layer
     with tf.name_scope('deconv2'):
         stride2 = 2
-        w_deconv2 = weight_variable([5, 5, 10, 25])
-        out_shape = [batch_size, deconv_1_x * stride2, deconv_1_y * stride2, 10]
-        h_deconv2 = tf.nn.relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
+        deconv2_maps = 25
+        w_deconv2 = weight_variable([5, 5, deconv2_maps, conv_deconv_maps])
+        out_shape = [batch_size, deconv_1_x * stride2, deconv_1_y * stride2, deconv2_maps]
+        h_deconv2 = leaky_relu(deconv2d(h_conv_deconv, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
     # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
-        w_deconv3 = weight_variable([4, 4, 1, 10])
+        w_deconv3 = weight_variable([4, 4, 1, deconv2_maps])
         out_shape = [batch_size, deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3, 1]
-        h_deconv3 = tf.nn.relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]), name="prefinal_op")
+        h_deconv3 = leaky_relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
 
     final_size = (deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3)
     deepnn.n_deconv_layers = 3
@@ -216,6 +238,7 @@ def import_data_file(directory, type='completed'):
     reduced_data /= normalization_factor
     reduced_data /= 2 # this gets the data set into a range of -0.5 to 0.5, roughly
     reduced_data += 1 # This should guarantee that all out data is >0, i.e. within the range of a relu unit
+    reduced_data *= 10000 # maybe I have a vanishing gradient problem and maybe this will help?
     del data
     return reduced_data
 
@@ -230,12 +253,18 @@ def import_jp2_file(directory, type='completed'):
         jp2_file = jp2_file[border_trim:-border_trim, border_trim:-border_trim, :]
         newx, newy = calc_newshape(jp2_file.shape)
         jp2_file = jp2_file[0:newx, 0:newy, :]
-    except:
+        jp2_file = jp2_file.astype(float)
+        jp2_file -= np.mean(jp2_file, axis=0)
+        jp2_file /= np.std(jp2_file, axis=0)
+    except Exception as e:
+        print(str(e))
         jp2_file = None
     return jp2_file
 
 
 def enqueue(directories, q):
+    sys.stderr = open(str(os.getpid()) + '.err', 'w')
+    sys.stdout = open(str(os.getpid()) + '.out', 'w')
     for d in directories:
         jp2_file = import_jp2_file(d)
         data_file = import_data_file(d)
@@ -244,6 +273,8 @@ def enqueue(directories, q):
                 q.put({'image':jp2_file, 'topography': data_file}, block=True, timeout=20)
             except:
                 pass
+        sys.stdout.flush()
+        sys.stderr.flush()
 
 
 def get_useful_directories(type='completed'):
@@ -274,7 +305,7 @@ def main(_):
                                              predictions=y_conv, reduction=tf.losses.Reduction.SUM)
 
     with tf.name_scope('adam_optimizer'):
-        train_step = tf.train.RMSPropOptimizer(learning_rate=1e-3).minimize(loss)
+        train_step = tf.train.RMSPropOptimizer(learning_rate=1e-4).minimize(loss)
 
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)
@@ -287,7 +318,7 @@ def main(_):
     # Break off some of these directories into a separate test set
     total_data = len(data_directories)
     # also want to ensure that the total data is evenly divisible by number of batches and processes
-    num_processes = 8  # number of processes used to populate the queue
+    num_processes = 1  # number of processes used to populate the queue
     def lcm(a, b):
         return int((a*b) / gcd(a, b))
     total_data -= total_data % lcm(batch_size, num_processes)

@@ -21,7 +21,7 @@ ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/usr/local/lib
 WORKDIR /
 RUN rm -rf /tmp/workdir
 # Other project specific dependencies
-RUN pip3 install pybind11 glymur requests
+RUN pip3 install pybind11 glymur requests scikit-image python-dateutil plotly
 RUN apt-get install -y libopenjp2-7-dev
 # For some reason the following packages/env variables are necessary for vim to work properly. Without them it permanently hangs the terminal you're in (docker instance can still be connected to from other terminals though)
 RUN apt-get install -y language-pack-en-base locales

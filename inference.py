@@ -30,7 +30,7 @@ def main(args):
       jp2_file = jp2_file[100:-100, 100:-100, :]
       jp2_file = jp2_file[0:704, 0:704, :]
 
-      batch_size = 2
+      batch_size = 1
       input_array = [jp2_file for x in range(batch_size)]
       feed_dict1 = {x: input_array, x_shape: jp2_file.shape[:2]}
 
