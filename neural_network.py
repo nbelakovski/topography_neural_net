@@ -36,16 +36,17 @@ from random import random
 
 FLAGS = None
 
-max_input_size = 1600
+max_input_size = 1200
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
-batch_size = 1
+batch_size = 3
+standard_input_size = 704  # set this to None to allow the use of full size images
 # Set up a Queue for asynchronously loading the data
-training_data_queue = Manager().Queue(1000)
+training_data_queue = Queue(750)
 
 
-def leaky_relu(x):
+def relu(x):
     alpha = 0.01
-    return tf.maximum(tf.nn.relu(x), alpha * x)
+    return tf.nn.relu(x)
 
 def deepnn(x, x_shape, batch_size_holder):
     """deepnn builds the graph for a deep net for determining topography from image data.
@@ -65,7 +66,7 @@ def deepnn(x, x_shape, batch_size_holder):
         w_conv1 = weight_variable([5, 5, 3, conv1_maps])
         b_conv1 = bias_variable([conv1_maps])
         temp = conv2d(x, w_conv1)
-        h_conv1 = leaky_relu(tf.add(temp, b_conv1))
+        h_conv1 = relu(tf.add(temp, b_conv1))
         tf.summary.histogram('histogram', h_conv1)
 
     # Pooling layer - downsamples.
@@ -77,7 +78,7 @@ def deepnn(x, x_shape, batch_size_holder):
         conv2_maps = 250
         w_conv2 = weight_variable([5, 5, conv1_maps, conv2_maps])
         b_conv2 = bias_variable([conv2_maps])
-        h_conv2 = leaky_relu(conv2d(h_pool1, w_conv2) + b_conv2)
+        h_conv2 = relu(conv2d(h_pool1, w_conv2) + b_conv2)
 
     # Second pooling layer.
     with tf.name_scope('pool2'):
@@ -88,25 +89,18 @@ def deepnn(x, x_shape, batch_size_holder):
         conv3_maps = 250
         w_conv3 = weight_variable([4, 4, conv2_maps, conv3_maps])
         b_conv3 = bias_variable([conv3_maps])
-        h_conv3 = leaky_relu(conv2d(h_pool2, w_conv3) + b_conv3)
-    #
-    # Third convolutional layer
-    with tf.name_scope('conv3.5'):
-        conv35_maps = 125
-        w_conv35 = weight_variable([4, 4, conv3_maps, conv35_maps])
-        b_conv35 = bias_variable([conv35_maps])
-        h_conv35 = leaky_relu(conv2d(h_conv3, w_conv35) + b_conv35)
-
+        h_conv3 = relu(conv2d(h_pool2, w_conv3) + b_conv3)
+#
     # Third pooling layer.
     with tf.name_scope('pool3'):
-        h_pool3 = max_pool_2x2(h_conv35)
+        h_pool3 = max_pool_2x2(h_conv3)
 
     # Fourth convolutional layer
     with tf.name_scope('conv4'):
         conv4_maps = 100
-        w_conv4 = weight_variable([4, 4, conv35_maps, conv4_maps])
+        w_conv4 = weight_variable([4, 4, conv3_maps, conv4_maps])
         b_conv4 = bias_variable([conv4_maps])
-        h_conv4 = leaky_relu(conv2d(h_pool3, w_conv4) + b_conv4)
+        h_conv4 = relu(conv2d(h_pool3, w_conv4) + b_conv4)
 
     # Fourth pooling layer.
     with tf.name_scope('pool4'):
@@ -121,32 +115,24 @@ def deepnn(x, x_shape, batch_size_holder):
         deconv1_maps = 50
         w_deconv1 = weight_variable([6, 6, deconv1_maps, conv4_maps])  # height, width, out channels, in channels
         out_shape = [batch_size_holder[0], deconv_1_x, deconv_1_y, deconv1_maps]
-        h_deconv1 = leaky_relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
-
-    # temp convolutional layer
-    with tf.name_scope('conv-deconv'):
-        conv_deconv_maps = 50
-        w_conv_deconv = weight_variable([4, 4, conv_deconv_maps, deconv1_maps])
-        b_conv_deconv = bias_variable([conv_deconv_maps])
-        h_conv_deconv = leaky_relu(conv2d(h_deconv1, w_conv_deconv) + b_conv_deconv)
+        h_deconv1 = relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
     # Second deconvolutional layer
     with tf.name_scope('deconv2'):
         stride2 = 2
         deconv2_maps = 25
-        w_deconv2 = weight_variable([5, 5, deconv2_maps, conv_deconv_maps])
+        w_deconv2 = weight_variable([5, 5, deconv2_maps, deconv1_maps])
         out_shape = [batch_size_holder[0], deconv_1_x * stride2, deconv_1_y * stride2, deconv2_maps]
-        h_deconv2 = leaky_relu(deconv2d(h_conv_deconv, w_deconv2, out_shape, [1, stride2, stride2, 1]))
+        h_deconv2 = relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
     # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
         w_deconv3 = weight_variable([4, 4, 1, deconv2_maps])
         out_shape = [batch_size_holder[0], deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3, 1]
-        h_deconv3 = leaky_relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
+        h_deconv3 = relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
 
     final_size = (deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3)
-    deepnn.n_deconv_layers = 3
     with tf.name_scope('output'):
         # For use in the loss function, and in the inference script, rearrange the last layer to remove batch size and
         # the reference to the single channel
@@ -194,8 +180,10 @@ def bias_variable(shape):
 
 
 def calc_newshape(shape):
-    newx = min(shape[0] - (shape[0] % pow(2, deepnn.n_conv_layers)), max_input_size)
-    newy = min(shape[1] - (shape[1] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    # Use the standard input size, if it isn't none, otherwise bring it down to a size evenly divisible by 2^(number of convolutional layers)
+    # which makes it straightforward to predict the size of the output
+    newx = standard_input_size if standard_input_size is not None else min(shape[0] - (shape[0] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    newy = standard_input_size if standard_input_size is not None else min(shape[1] - (shape[1] % pow(2, deepnn.n_conv_layers)), max_input_size)
     return (newx, newy)
 
 
@@ -215,27 +203,17 @@ def import_data_file(directory, type='completed'):
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
     data = data[0:newx, 0:newy]
-    reduced_data = skimage.measure.block_reduce(data, block_size=(2,2), func=np.max) # max pool down to half size
-    '''if not os.path.exists('topo.pickle')
-        pickle.dump(reduced_data, 'topo.pickle')
-        with open('tmp','w') as f:
-            f.write(directory)
-    '''
+    reduced_data = skimage.measure.block_reduce(data, block_size=(2,2), func=np.max) # max pool down to half size, since tha'ts the size of the output
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
     # relative topography. It's also helpful that it's a fast operation
     reduced_data = reduced_data.astype(float)
     reduced_data -= reduced_data.mean()
     normalization_factor = 600000  # this number came from an analysis of the entire set. goal is normalization, i.e. get the data in a range from -1 to 1
-    '''
-    if reduced_data.max() > normalization_factor:
-        del data
-        return None
-    '''
     reduced_data /= normalization_factor
     reduced_data /= 2 # this gets the data set into a range of -0.5 to 0.5, roughly
     reduced_data += 1 # This should guarantee that all out data is >0, i.e. within the range of a relu unit
-    reduced_data *= 10000 # maybe I have a vanishing gradient problem and maybe this will help?
+    reduced_data *= 1000 # maybe I have a vanishing gradient problem and maybe this will help?
     del data
     return reduced_data
 
@@ -262,28 +240,28 @@ def import_jp2_file(directory, type='completed'):
 def enqueue(directories, q):
     sys.stderr = open(str(os.getpid()) + '.err', 'w')
     sys.stdout = open(str(os.getpid()) + '.out', 'w')
+    print("Queue size: ", q._maxsize)
     for d in directories:
         jp2_file = import_jp2_file(d)
         data_file = import_data_file(d)
         if data_file is not None and jp2_file is not None:
             try:
-                q.put({'image':jp2_file, 'topography': data_file}, block=True, timeout=20)
+                q.put({'image':jp2_file, 'topography': data_file}, block=True, timeout=60)
             except:
-                pass
+                sys.stderr.flush()
+                del jp2_file, data_file
         sys.stdout.flush()
         sys.stderr.flush()
 
 
 def get_useful_directories(type='completed'):
     data_directories = os.listdir(FLAGS.data_dir + '/' + type)
-    '''
     def shape_ok(d):
+        if standard_input_size is None: return True
         with open(FLAGS.data_dir + '/' + type + '/' + d + '/cropped', 'r') as f:
             shape = [int(x) for x in f.readline().split(',')]
-            return all(x > input_size + 2* border_trim for x in shape[:2])
-    # TODO: group results by shape (really, by shape -= shape % pow(2,deepnn.n_conv_layers)
+            return all(x > standard_input_size + 2* border_trim for x in shape[:2])
     data_directories = [x for x in data_directories if shape_ok(x)]
-    '''
     return data_directories
 
 
@@ -305,7 +283,7 @@ def main(_):
                                              predictions=y_conv, reduction=tf.losses.Reduction.SUM)
 
     with tf.name_scope('adam_optimizer'):
-        train_step = tf.train.RMSPropOptimizer(learning_rate=1e-4).minimize(loss)
+        train_step = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(loss)
 
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)
@@ -318,7 +296,7 @@ def main(_):
     # Break off some of these directories into a separate test set
     total_data = len(data_directories)
     # also want to ensure that the total data is evenly divisible by number of batches and processes
-    num_processes = 1  # number of processes used to populate the queue
+    num_processes = 2  # number of processes used to populate the queue
     def lcm(a, b):
         return int((a*b) / gcd(a, b))
     total_data -= total_data % lcm(batch_size, num_processes)
@@ -360,7 +338,7 @@ def main(_):
     # In attempting to deal with GPU issues, I will try to get tensorflow to only allocate gpu memory as needed, instead
     # of having it allocate all the GPU memory, which is what it does by default
     config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+    config.gpu_options.allow_growth = False
     accuracy_log = open('accuracy.log', 'a')
 
     with tf.Session(config=config) as sess:

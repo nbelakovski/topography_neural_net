@@ -28,6 +28,8 @@ test /= 10000
 test -= 1
 test *= 2
 test *= 600000
+test *= -1
+test = numpy.flipud(test)
 # Create a surface plot
 plot_data = [go.Surface(z=m), go.Surface(z=test)]
 
