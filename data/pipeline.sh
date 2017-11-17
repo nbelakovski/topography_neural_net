@@ -37,7 +37,7 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
         if [[ -e $DATA_DIR/downloading/$folder/jpg.wget ]]; then  # if the jpg.wget exists, the other probably do too
             ZIP=$(grep saved $DATA_DIR/downloading/${folder}/*wget | grep ZIP | wc -l)
             JP2=$(grep saved $DATA_DIR/downloading/${folder}/*wget | grep jp2 | wc -l)
-            JPG=$(grep saved $DATA_DIR/downloading/${folder}/*wget | grep jpg | wc -l)
+            JPG=$(grep -E 'fully|saved' $DATA_DIR/downloading/${folder}/*wget | grep jpg | wc -l) # sometimes the jpg file says "Already fully retrieved"
         fi
         if [[ ${ZIP} -eq 1 ]] && [[ ${JP2} -eq 1 ]] && [[ ${JPG} -eq 1 ]] && [[ ! -e $DATA_DIR/downloading/$folder/moved_to_preprocessing ]]; then
             echo "Moving $folder data to preprocessing"
