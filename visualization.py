@@ -18,7 +18,7 @@ z_data = read_data(data_filename)
 interpolate_zeros(z_data)
 # scale matrix down to something that can be reasonably loaded in an html page
 matrix_size = 300
-m = skimage.measure.block_reduce(z_data, block_size=(2,2), func=np.max) # max pool down to half size
+m = skimage.measure.block_reduce(z_data, block_size=(16, 16), func=np.max) # max pool down to half size
 m = m.astype(float)
 m -= m.mean()
 

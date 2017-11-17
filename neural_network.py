@@ -65,9 +65,7 @@ def deepnn(x, x_shape, batch_size_holder):
         conv1_maps = 175
         w_conv1 = weight_variable([5, 5, 3, conv1_maps])
         b_conv1 = bias_variable([conv1_maps])
-        temp = conv2d(x, w_conv1)
-        h_conv1 = relu(tf.add(temp, b_conv1))
-        tf.summary.histogram('histogram', h_conv1)
+        h_conv1 = relu(conv2d(x, w_conv1) + b_conv1)
 
     # Pooling layer - downsamples.
     with tf.name_scope('pool1'):
@@ -97,7 +95,7 @@ def deepnn(x, x_shape, batch_size_holder):
 
     # Fourth convolutional layer
     with tf.name_scope('conv4'):
-        conv4_maps = 100
+        conv4_maps = 1
         w_conv4 = weight_variable([4, 4, conv3_maps, conv4_maps])
         b_conv4 = bias_variable([conv4_maps])
         h_conv4 = relu(conv2d(h_pool3, w_conv4) + b_conv4)
@@ -108,13 +106,14 @@ def deepnn(x, x_shape, batch_size_holder):
 
     # First deconvolution layer. Upsample the last pooling layer and halve the number of feature maps
     deepnn.n_conv_layers = 4
-    deconv_1_x = tf.cast(tf.ceil(tf.divide(x_shape[0], (2 * deepnn.n_conv_layers))), tf.int32)
-    deconv_1_y = tf.cast(tf.ceil(tf.divide(x_shape[1], (2 * deepnn.n_conv_layers))), tf.int32)
+    deconv_1_x = tf.cast(tf.ceil(tf.divide(x_shape[0], (pow(2, deepnn.n_conv_layers)))), tf.int32)
+    deconv_1_y = tf.cast(tf.ceil(tf.divide(x_shape[1], (pow(2, deepnn.n_conv_layers)))), tf.int32)
+    '''
     with tf.name_scope('deconv1'):
         stride1 = 2
         deconv1_maps = 50
         w_deconv1 = weight_variable([6, 6, deconv1_maps, conv4_maps])  # height, width, out channels, in channels
-        out_shape = [batch_size_holder[0], deconv_1_x, deconv_1_y, deconv1_maps]
+        out_shape = [batch_size_holder[0], deconv_1_x * stride1, deconv_1_y * stride1, deconv1_maps]
         h_deconv1 = relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
 
     # Second deconvolutional layer
@@ -122,22 +121,25 @@ def deepnn(x, x_shape, batch_size_holder):
         stride2 = 2
         deconv2_maps = 25
         w_deconv2 = weight_variable([5, 5, deconv2_maps, deconv1_maps])
-        out_shape = [batch_size_holder[0], deconv_1_x * stride2, deconv_1_y * stride2, deconv2_maps]
+        out_shape = [batch_size_holder[0], deconv_1_x * stride1 * stride2, deconv_1_y * stride1 * stride2, deconv2_maps]
         h_deconv2 = relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
 
     # Third deconvolutional layer
     with tf.name_scope('deconv3'):
         stride3 = 2
         w_deconv3 = weight_variable([4, 4, 1, deconv2_maps])
-        out_shape = [batch_size_holder[0], deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3, 1]
+        out_shape = [batch_size_holder[0], deconv_1_x * stride1 * stride2 * stride3, deconv_1_y * stride1 * stride2 * stride3, 1]
         h_deconv3 = relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
 
-    final_size = (deconv_1_x * stride2 * stride3, deconv_1_y * stride2 * stride3)
+    final_size = (deconv_1_x * stride1 * stride2 * stride3, deconv_1_y * stride1 * stride2 * stride3)
+    '''
+    final_size = (deconv_1_x, deconv_1_y)
+    print(final_size)
     with tf.name_scope('output'):
         # For use in the loss function, and in the inference script, rearrange the last layer to remove batch size and
         # the reference to the single channel
         # y_conv = tf.reshape(h_deconv3, [-1, deepnn.output_size, deepnn.output_size], name="final_op")
-        y_conv = tf.reshape(h_deconv3, [-1, final_size[0], final_size[1]], name="final_op")
+        y_conv = tf.reshape(h_pool4, [-1, final_size[0], final_size[1]], name="final_op")
     return y_conv
 
 
@@ -203,7 +205,7 @@ def import_data_file(directory, type='completed'):
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
     data = data[0:newx, 0:newy]
-    reduced_data = skimage.measure.block_reduce(data, block_size=(2,2), func=np.max) # max pool down to half size, since tha'ts the size of the output
+    reduced_data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.max) # max pool down
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
     # relative topography. It's also helpful that it's a fast operation
