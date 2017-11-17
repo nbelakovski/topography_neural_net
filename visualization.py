@@ -11,14 +11,12 @@ from data.subsample_matrix import subsample_matrix
 import sys
 from data.utils import read_data, interpolate_zeros
 
-border_trim = 1
 data_filename = sys.argv[1]
 # Load the matrix containing the original topographical data
 z_data = read_data(data_filename)
+# Pool it down to the same size as the output of the net
+m = skimage.measure.block_reduce(z_data, block_size=(16, 16), func=np.mean) # pool down
 interpolate_zeros(z_data)
-# scale matrix down to something that can be reasonably loaded in an html page
-matrix_size = 300
-m = skimage.measure.block_reduce(z_data, block_size=(16, 16), func=np.max) # max pool down to half size
 m = m.astype(float)
 m -= m.mean()
 

@@ -196,16 +196,16 @@ def import_data_file(directory, type='completed'):
        del data
        return None
     data = data[border_trim:-border_trim, border_trim:-border_trim]
-    interpolate_zeros(data)
-    if data[0][0] == -999:
-        print("Detected datafile with bad row in", directory)
-        del data
-        return None
     data = np.flipud(data) # flip it around so that the data points match the pixel layout
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
     data = data[0:newx, 0:newy]
-    reduced_data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.max) # max pool down
+    reduced_data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.mean) # pool down
+    interpolate_zeros(reduced_data)
+    if reduced_data[0][0] == -999:
+        print("Detected datafile with bad row in", directory)
+        del data
+        return None
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
     # relative topography. It's also helpful that it's a fast operation
