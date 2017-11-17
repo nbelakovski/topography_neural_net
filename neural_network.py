@@ -242,13 +242,13 @@ def import_jp2_file(directory, type='completed'):
 def enqueue(directories, q):
     sys.stderr = open(str(os.getpid()) + '.err', 'w')
     sys.stdout = open(str(os.getpid()) + '.out', 'w')
-    print("Queue size: ", q._maxsize)
+    # print("Queue size: ", q._maxsize)
     for d in directories:
         jp2_file = import_jp2_file(d)
         data_file = import_data_file(d)
         if data_file is not None and jp2_file is not None:
             try:
-                q.put({'image':jp2_file, 'topography': data_file}, block=True, timeout=60)
+                q.put({'image':jp2_file, 'topography': data_file}, block=True)
             except:
                 sys.stderr.flush()
                 del jp2_file, data_file
@@ -287,6 +287,12 @@ def main(_):
     with tf.name_scope('adam_optimizer'):
         train_step = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(loss)
 
+    with tf.name_scope('R2'):
+        ssres = tf.reduce_sum(tf.squared_difference(y_, y_conv))
+        sstot = tf.reduce_sum(tf.square(y_ - tf.reduce_mean(y_)))
+        R2 = 1 - ssres/sstot
+
+
     graph_location = tempfile.mkdtemp()
     print('Saving graph to: %s' % graph_location)
     train_writer = tf.summary.FileWriter(graph_location)
@@ -308,7 +314,7 @@ def main(_):
 
     chunk_size = int(len(training_directories) / num_processes)
     # Set up a Queue for asynchronously loading the data
-    training_data_queue = Queue(750)
+    training_data_queue = Manager().Queue(750)
     args = [[training_directories[i:i+chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
     processes = []
     for arg in args:
@@ -359,10 +365,15 @@ def main(_):
 
 
         def evaluate(epoch, batch_number):
+            predictions = y_conv.eval(feed_dict={
+                x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], batch_size_holder: [batch_size]})
             train_accuracy = loss.eval(feed_dict={
-                x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], y_: evaluation_batch['topographies'], batch_size_holder: [batch_size]})
-            print('epoch %d, batch_number %d, training accuracy %.12g' % (epoch, batch_number, train_accuracy))
-            accuracy_log.write('epoch %d, batch_number %d, training accuracy %.12g\n' % (epoch, batch_number, train_accuracy))
+                y_conv: predictions, y_: evaluation_batch['topographies']})
+            coefficient_of_determination = R2.eval(feed_dict={
+                y_conv: predictions, y_: evaluation_batch['topographies']})
+            stats_str = 'epoch %d, batch_number %d, evaluation loss: %.12g, eval accuracy: %.3g\n' % (epoch, batch_number, train_accuracy, coefficient_of_determination)
+            print(stats_str)
+            accuracy_log.write(stats_str)
             accuracy_log.flush()
 
 
@@ -375,7 +386,7 @@ def main(_):
             training_batch = {'images': [], 'topographies': []}
             for i in range(batch_size):
                 try:
-                    training_data = training_data_queue.get(block=True, timeout=20)
+                    training_data = training_data_queue.get(block=True)
                 except queue.Empty as qe:
                     print("Queue is empty")
                     print([p.is_alive() for p in processes])
