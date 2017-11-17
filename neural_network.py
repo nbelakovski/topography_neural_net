@@ -17,6 +17,7 @@
 """
 
 import argparse
+import utils
 import pickle
 import numpy as np
 import sys
@@ -40,8 +41,6 @@ max_input_size = 1200
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
 batch_size = 3
 standard_input_size = 704  # set this to None to allow the use of full size images
-# Set up a Queue for asynchronously loading the data
-training_data_queue = Queue(750)
 
 
 def relu(x):
@@ -184,8 +183,9 @@ def bias_variable(shape):
 def calc_newshape(shape):
     # Use the standard input size, if it isn't none, otherwise bring it down to a size evenly divisible by 2^(number of convolutional layers)
     # which makes it straightforward to predict the size of the output
-    newx = standard_input_size if standard_input_size is not None else min(shape[0] - (shape[0] % pow(2, deepnn.n_conv_layers)), max_input_size)
-    newy = standard_input_size if standard_input_size is not None else min(shape[1] - (shape[1] % pow(2, deepnn.n_conv_layers)), max_input_size)
+    evenly_divisible_shape = utils.evenly_divisible_shape(shape, pow(2, deepnn.n_conv_layers))
+    newx = standard_input_size if standard_input_size is not None else min(evenly_divisible_shape[0], max_input_size)
+    newy = standard_input_size if standard_input_size is not None else min(evenly_divisible_shape[1], max_input_size)
     return (newx, newy)
 
 
@@ -307,6 +307,8 @@ def main(_):
     training_directories.sort(key= lambda x: random())  # x is unused, this is for shuffling
 
     chunk_size = int(len(training_directories) / num_processes)
+    # Set up a Queue for asynchronously loading the data
+    training_data_queue = Queue(750)
     args = [[training_directories[i:i+chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
     processes = []
     for arg in args:

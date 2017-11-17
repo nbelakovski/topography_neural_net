@@ -10,13 +10,16 @@ import numpy as np
 from data.subsample_matrix import subsample_matrix
 import sys
 from data.utils import read_data, interpolate_zeros
+import utils
 
 data_filename = sys.argv[1]
 # Load the matrix containing the original topographical data
 z_data = read_data(data_filename)
+interpolate_zeros(z_data)
+new_shape = utils.evenly_divisible_shape(z_data.shape, 16)
+z_data = z_data[0:new_shape[0], 0:new_shape[1]]
 # Pool it down to the same size as the output of the net
 m = skimage.measure.block_reduce(z_data, block_size=(16, 16), func=np.mean) # pool down
-interpolate_zeros(z_data)
 m = m.astype(float)
 m -= m.mean()
 

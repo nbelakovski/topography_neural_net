@@ -8,6 +8,7 @@ import pickle
 import tensorflow as tf
 import os
 import sys
+import utils
 
 def main(args):
   # Import data
@@ -28,6 +29,11 @@ def main(args):
 
       jp2_filename = sys.argv[1]
       jp2_file = glymur.Jp2k(jp2_filename).read()
+      # crop it down to a shape that's evenly divisible by the total amount of pooling it will go through
+      # this helps avoid weird padding issues. I could change the padding in the net, but I'd rather set
+      # up the input so that it's a non-issue
+      new_shape = utils.evenly_divisible_shape(jp2_file.shape, 16)  # TODO: don't hardcode 16 :(
+      jp2_file = jp2_file[0:new_shape[0], 0:new_shape[1], :]
 
       feed_dict1 = {x: [jp2_file], x_shape: jp2_file.shape[:2], batch_size: [1]}
 
