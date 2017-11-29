@@ -30,7 +30,8 @@ from time import sleep
 from math import ceil, gcd
 from random import random
 from data.subsample_matrix import subsample_matrix
-from data.utils import read_data, interpolate_zeros
+from data.utils import interpolate_zeros
+from tools.tools import read_data
 from multiprocessing import Queue, Process, Manager
 import queue
 from random import random
@@ -314,7 +315,7 @@ def main(_):
 
     chunk_size = int(len(training_directories) / num_processes)
     # Set up a Queue for asynchronously loading the data
-    training_data_queue = Manager().Queue(750)
+    training_data_queue = Manager().Queue(100)
     args = [[training_directories[i:i+chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
     processes = []
     for arg in args:
@@ -328,13 +329,15 @@ def main(_):
     for d in dirs:
         jp2_file = import_jp2_file(d, 'evaluation')
         data_file = import_data_file(d, 'evaluation')
-        if jp2_file is not None and data_file is not None and len(evaluation_batch['images']) < batch_size:
+        if jp2_file is not None and data_file is not None:
             evaluation_batch['images'].append(jp2_file)
             evaluation_batch['topographies'].append(data_file)
             if not os.path.exists('sample_data.pickle'):
                 pickle.dump(data_file, open('sample_data.pickle', 'wb'))
             if not os.path.exists('temp-plot.jp2'):
                 glymur.Jp2k('temp-plot.jp2', data=jp2_file)
+        if  len(evaluation_batch['images']) < batch_size:
+            break
     print("evaluation size:", len(evaluation_batch['images']))
 
     # Set up the code to save the network and its parameters
