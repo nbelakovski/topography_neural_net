@@ -1,40 +1,28 @@
-# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
+#!/usr/bin/python3
 
-"""A deep regressor using convolutional layers.
-"""
+# Attribution: This code started from the Tensorflow deep MNIST convulational
+# example, and was expanded upon from there.
 
+"""A deep regressor using convolutional layers."""
+
+# Python libraries (alphabetical)
 import argparse
-import utils
-import pickle
-import numpy as np
-import sys
-import tempfile
 import glymur
-import tensorflow as tf
-import os
-import skimage.measure
-from time import sleep
 from math import ceil, gcd
-from random import random
-from data.subsample_matrix import subsample_matrix
-from data.utils import interpolate_zeros
-from tools.tools import read_data
 from multiprocessing import Queue, Process, Manager
+import numpy as np
+import os
 import queue
 from random import random
+import skimage.measure
+import sys
+import tempfile
+import tensorflow as tf
+
+# My libraries (alphabetical)
+from data.utils import interpolate_zeros
+from tools.tools import read_data
+from utils import evenly_divisible_shape
 
 FLAGS = None
 
@@ -44,9 +32,6 @@ batch_size = 3
 standard_input_size = 704  # set this to None to allow the use of full size images
 
 
-def relu(x):
-    alpha = 0.01
-    return tf.nn.relu(x)
 
 def deepnn(x, x_shape, batch_size_holder):
     """deepnn builds the graph for a deep net for determining topography from image data.
@@ -142,6 +127,9 @@ def deepnn(x, x_shape, batch_size_holder):
         y_conv = tf.reshape(h_pool4, [-1, final_size[0], final_size[1]], name="final_op")
     return y_conv
 
+def relu(x):
+    """ returns a relu. Meant to be easily modified to return a leaky relu """
+    return tf.nn.relu(x)
 
 def deconv2d(x, w, output_shape, strides=None):
     """deconv2d returns a 2d deconvolution layer with full stride."""
@@ -184,9 +172,9 @@ def bias_variable(shape):
 def calc_newshape(shape):
     # Use the standard input size, if it isn't none, otherwise bring it down to a size evenly divisible by 2^(number of convolutional layers)
     # which makes it straightforward to predict the size of the output
-    evenly_divisible_shape = utils.evenly_divisible_shape(shape, pow(2, deepnn.n_conv_layers))
-    newx = standard_input_size if standard_input_size is not None else min(evenly_divisible_shape[0], max_input_size)
-    newy = standard_input_size if standard_input_size is not None else min(evenly_divisible_shape[1], max_input_size)
+    new_size = evenly_divisible_shape(shape, pow(2, deepnn.n_conv_layers))
+    newx = standard_input_size if standard_input_size is not None else min(new_size[0], max_input_size)
+    newy = standard_input_size if standard_input_size is not None else min(new_size[1], max_input_size)
     return (newx, newy)
 
 
@@ -332,10 +320,6 @@ def main(_):
         if jp2_file is not None and data_file is not None:
             evaluation_batch['images'].append(jp2_file)
             evaluation_batch['topographies'].append(data_file)
-            if not os.path.exists('sample_data.pickle'):
-                pickle.dump(data_file, open('sample_data.pickle', 'wb'))
-            if not os.path.exists('temp-plot.jp2'):
-                glymur.Jp2k('temp-plot.jp2', data=jp2_file)
         if  len(evaluation_batch['images']) < batch_size:
             break
     print("evaluation size:", len(evaluation_batch['images']))
