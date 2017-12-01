@@ -1,15 +1,13 @@
 #pragma once
 
 #include <pybind11/numpy.h>
-/*
-// forward declarations (the "hidden" attribute is to suppress compiler warnings, similar to how pybind11 does it in detail/common.h
-namespace pybind11 __attribute__((visibility("hidden")))
-{
-class array;
-}*/
 
 namespace matrix_ops
 {
-void interpolate_zeros(pybind11::array_t<int> & matrix);
+/***
+ * @brief Given a matrix, fill any 0-values with surrounding data (interpolated as necessary, i.e. 1 0 0 4 becomes 1 2 3 4)
+ * @return 0 on success. -1 if there is a row filled entirely with 0's
+ **/
+int interpolate_zeros(pybind11::array_t<int> & matrix);
 }
 

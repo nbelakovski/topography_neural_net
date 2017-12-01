@@ -25,25 +25,24 @@ from tools.tools import read_data
 from utils import evenly_divisible_shape
 
 FLAGS = None
-
 max_input_size = 1200
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
 batch_size = 3
 standard_input_size = 704  # set this to None to allow the use of full size images
 
 
-
 def deepnn(x, x_shape, batch_size_holder):
     """deepnn builds the graph for a deep net for determining topography from image data.
 
-  Args:
-    x: input tensor with dimensions [batch_size, x_shape[0], x_shape[1], 3]
-    x_shape: [width, height] of input image
-    batch_size_holder: [batch_size]
+      Args:
+        x: input tensor with dimensions [batch_size, x_shape[0], x_shape[1], 3]
+        x_shape: [width, height] of input image
+        batch_size_holder: [batch_size]
 
-  Returns:
-    A tensor y of shape (output_size, output_size), with values equal to the topography of the input image
-  """
+      Returns:
+        A tensor y of shape (output_size, output_size), with values equal to the topography of the input image
+
+    """
 
     # First convolutional layer - maps one image to a bunch of feature maps.
     with tf.name_scope('conv1'):
@@ -178,7 +177,7 @@ def calc_newshape(shape):
     return (newx, newy)
 
 
-def import_data_file(directory, type='completed'):
+def import_data_file(directory, type='training'):
     topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, type, directory)) if x[-5:] == '.data'][0]
     data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
     if any(dimension < ((border_trim * 2) * 1.5) for dimension in data.shape):
@@ -189,12 +188,12 @@ def import_data_file(directory, type='completed'):
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
     data = data[0:newx, 0:newy]
-    reduced_data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.mean) # pool down
-    interpolate_zeros(reduced_data)
-    if reduced_data[0][0] == -999:
+    rcode = interpolate_zeros(data)
+    if rcode == -1:
         print("Detected datafile with bad row in", directory)
         del data
         return None
+    reduced_data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.mean) # pool down
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
     # relative topography. It's also helpful that it's a fast operation
@@ -209,7 +208,7 @@ def import_data_file(directory, type='completed'):
     return reduced_data
 
 
-def import_jp2_file(directory, type='completed'):
+def import_jp2_file(directory, type='training'):
     jp2_filename = os.path.join(FLAGS.data_dir, type, directory, 'cropped.jp2')
     try:
         jp2_file = glymur.Jp2k(jp2_filename).read()
@@ -245,11 +244,11 @@ def enqueue(directories, q):
         sys.stderr.flush()
 
 
-def get_useful_directories(type='completed'):
+def get_useful_directories(type='training'):
     data_directories = os.listdir(FLAGS.data_dir + '/' + type)
     def shape_ok(d):
         if standard_input_size is None: return True
-        with open(FLAGS.data_dir + '/' + type + '/' + d + '/cropped', 'r') as f:
+        with open(FLAGS.data_dir + '/' + type + '/' + d + '/cropped_size.txt', 'r') as f:
             shape = [int(x) for x in f.readline().split(',')]
             return all(x > standard_input_size + 2* border_trim for x in shape[:2])
     data_directories = [x for x in data_directories if shape_ok(x)]

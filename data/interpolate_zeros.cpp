@@ -1,11 +1,10 @@
 #include "interpolate_zeros.hpp"
 #include <pybind11/numpy.h>
-#include <iostream>
 
 namespace matrix_ops
 {
 
-void interpolate_zeros(pybind11::array_t<int> & matrix)
+int interpolate_zeros(pybind11::array_t<int> & matrix)
 {
   int rows = matrix.shape()[0];
   int cols = matrix.shape()[1];
@@ -33,10 +32,7 @@ void interpolate_zeros(pybind11::array_t<int> & matrix)
         int end_val = 0;
         if (start_col == 0 && end_col == -1)
         {
-          std::cerr << "Entire row is blank. Fucking off..." << std::endl;
-          int * data = static_cast<int*>(matrix.mutable_data(0, 0));
-          *data = -999;
-          return;
+          return -1;
         }
         else if (start_col == 0)
         {
@@ -63,6 +59,7 @@ void interpolate_zeros(pybind11::array_t<int> & matrix)
       }
     }
   }
+  return 0;
 }
 
 }
