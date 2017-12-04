@@ -112,34 +112,30 @@ int interpolate_zeros(pybind11::array_t<int> & matrix)
 
 void add_to_value_and_total(const pybind11::array_t<int> & matrix, const int row, const int col, int * value, int * total)
 {
-   const int rows = matrix.shape()[0];
-   const int cols = matrix.shape()[1];
-   if ((row >= 0) && (row < rows) && (col >= 0) && (col < cols))
+   int val = *static_cast<const int*>(matrix.data(row, col));
+   if (val != 0)
    {
-       int val = *static_cast<const int*>(matrix.data(row, col));
-       if (val != 0)
-       {
-           *value += val;
-           *total += 1;
-       }
+       *value += val;
+       *total += 1;
    }
-
 }
 
 int populate_index_from_neighbors(pybind11::array_t<int> & matrix, const std::pair<int, int> & index)
 {
    int total = 0;
    int value = 0;
+   const int rows = matrix.shape()[0];
+   const int cols = matrix.shape()[1];
    const int row = index.first;
    const int col = index.second;
-   add_to_value_and_total(matrix, row - 1, col - 1, &value, &total);
-   add_to_value_and_total(matrix, row - 1, col,     &value, &total);
-   add_to_value_and_total(matrix, row - 1, col + 1, &value, &total);
-   add_to_value_and_total(matrix, row,     col - 1, &value, &total);
-   add_to_value_and_total(matrix, row,     col + 1, &value, &total);
-   add_to_value_and_total(matrix, row + 1, col - 1, &value, &total);
-   add_to_value_and_total(matrix, row + 1, col,     &value, &total);
-   add_to_value_and_total(matrix, row + 1, col + 1, &value, &total);
+   for(int i = std::max(row - 5, 0); i < std::min(row + 6, rows); ++i)
+   {
+       for(int j = std::max(col - 5, 0); j < std::min(col + 6, cols); ++j)
+       {
+           if(i == row && j == col) {continue;}
+           add_to_value_and_total(matrix, i, j, &value, &total);
+       }
+   }
 
    if(total > 0)
    {
