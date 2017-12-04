@@ -9,5 +9,6 @@ namespace matrix_ops
  * @return 0 on success. -1 if there is a row filled entirely with 0's
  **/
 int interpolate_zeros(pybind11::array_t<int> & matrix);
+void interpolate_zeros_2(pybind11::array_t<int> & matrix);
 }
 
