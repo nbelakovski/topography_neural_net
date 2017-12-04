@@ -129,9 +129,9 @@ int populate_index_from_neighbors(pybind11::array_t<int> & matrix, const std::pa
    const int cols = matrix.shape()[1];
    const int row = index.first;
    const int col = index.second;
-   for(int i = std::max(row - 5, 0); i < std::min(row + 6, rows); ++i)
+   for(int i = std::max(row - 1, 0); i < std::min(row + 2, rows); ++i)
    {
-       for(int j = std::max(col - 5, 0); j < std::min(col + 6, cols); ++j)
+       for(int j = std::max(col - 1, 0); j < std::min(col + 2, cols); ++j)
        {
            if(i == row && j == col) {continue;}
            add_to_value_and_total(matrix, i, j, &value, &total);
@@ -166,15 +166,8 @@ void interpolate_zeros_2(pybind11::array_t<int> & matrix)
   const int rows = matrix.shape()[0];
   const int cols = matrix.shape()[1];
   std::vector<std::pair<int, int>> zero_value_indices;
-  // Identify all indices with a value of 0
-  /* for(int row = 0; row < rows; ++row) */
-  /* { */
-  /*     for(int col = 0; col < cols; ++col) */
-  /*     { */
-  /*         check_zero_and_add_to_list(matrix, row, col, zero_value_indices); */
-  /*     } */
-  /* } */
-  // Idea: build out the zero index from a spiral starting in the middle and moving outwards. Having control over the order might improve the result
+  // Build out the index of zero  values from a spiral starting in the middle and moving outwards.
+  // This way, when the algorithm goes to fill the 0's, it always fills from the middle out
   int pivot_row = rows / 2;
   int pivot_col = cols / 2;
   int stride = 1;
@@ -199,7 +192,6 @@ void interpolate_zeros_2(pybind11::array_t<int> & matrix)
       next_col = pivot_col + stride;
       for(int i = std::max(pivot_col, 0); i <= next_col && i < cols && pivot_row >= 0 && pivot_row < rows; ++i)
       {
-          /* std::cout << i << std::endl; */
           check_zero_and_add_to_list(matrix, pivot_row, i, zero_value_indices);
       }
       if(next_col >= cols && next_row <= 0) {top_right_corner_hit = true;}
@@ -221,7 +213,6 @@ void interpolate_zeros_2(pybind11::array_t<int> & matrix)
       next_col = pivot_col - stride;
       for(int i = std::min(pivot_col, cols - 1); i >= next_col && i >= 0 && pivot_row >= 0 && pivot_row < rows; --i)
       {
-          /* std::cout << i << ", " << pivot_row << std::endl; */
           check_zero_and_add_to_list(matrix, pivot_row, i, zero_value_indices);
       }
       if(next_col <= 0 && next_row >= rows) {bottom_left_corner_hit = true;}
