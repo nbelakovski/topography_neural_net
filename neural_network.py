@@ -20,7 +20,7 @@ import tempfile
 import tensorflow as tf
 
 # My libraries (alphabetical)
-from data.utils import interpolate_zeros
+from data.utils import interpolate_zeros_2
 from tools.tools import read_data
 from utils import evenly_divisible_shape
 
@@ -188,7 +188,7 @@ def import_data_file(directory, type='training'):
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
     data = data[0:newx, 0:newy]
-    rcode = interpolate_zeros(data)
+    rcode = interpolate_zeros_2(data)
     if rcode == -1:
         print("Detected datafile with bad row in", directory)
         del data
@@ -292,7 +292,7 @@ def main(_):
     # Break off some of these directories into a separate test set
     total_data = len(data_directories)
     # also want to ensure that the total data is evenly divisible by number of batches and processes
-    num_processes = 2  # number of processes used to populate the queue
+    num_processes = 3  # number of processes used to populate the queue
     def lcm(a, b):
         return int((a*b) / gcd(a, b))
     total_data -= total_data % lcm(batch_size, num_processes)
@@ -310,18 +310,7 @@ def main(_):
         p.start()
         processes.append(p)
 
-    # grab batch_size items out of the queue to have them for the periodic accuracy evaluation
-    evaluation_batch = {'images': [], 'topographies': []}
-    dirs = get_useful_directories('evaluation')
-    for d in dirs:
-        jp2_file = import_jp2_file(d, 'evaluation')
-        data_file = import_data_file(d, 'evaluation')
-        if jp2_file is not None and data_file is not None:
-            evaluation_batch['images'].append(jp2_file)
-            evaluation_batch['topographies'].append(data_file)
-        if  len(evaluation_batch['images']) < batch_size:
-            break
-    print("evaluation size:", len(evaluation_batch['images']))
+    evaluation_dirs = get_useful_directories('evaluation')
 
     # Set up the code to save the network and its parameters
     saver = tf.train.Saver()
@@ -350,7 +339,21 @@ def main(_):
             print("Initializing global variables...done")
 
 
+        def get_evaluation_batch():
+            evaluation_batch = {'images': [], 'topographies': []}
+            for i in range(batch_size):
+                d = evaluation_dirs[int(random() * len(evaluation_dirs))]
+                jp2_file = import_jp2_file(d, 'evaluation')
+                data_file = import_data_file(d, 'evaluation')
+                if jp2_file is not None and data_file is not None:
+                    evaluation_batch['images'].append(jp2_file)
+                    evaluation_batch['topographies'].append(data_file)
+            return evaluation_batch
+
+
+
         def evaluate(epoch, batch_number):
+            evaluation_batch = get_evaluation_batch()
             predictions = y_conv.eval(feed_dict={
                 x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], batch_size_holder: [batch_size]})
             train_accuracy = loss.eval(feed_dict={
@@ -385,7 +388,7 @@ def main(_):
             return training_batch if len(training_batch['images']) == batch_size else None
 
 
-        for epoch in range(11000):
+        for epoch in range(10):
             print("Running epoch", epoch)
             # Run training through the entire data set. Reaching the end of the dataset will be indicated by the thread
             # stopping and the queue getting emptied
@@ -429,6 +432,8 @@ def main(_):
             training_directories = data_directories[0:total_data]
             chunk_size = int(len(training_directories) / num_processes)
             training_directories.sort(key= lambda x: random())  # x is unused
+            # Create a new instance of the queue
+            training_data_queue = Manager().Queue(100)
             args = [[training_directories[i:i + chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
             for arg in args:
                 p = Process(target=enqueue, args=arg)
