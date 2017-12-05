@@ -92,6 +92,8 @@ def deepnn(x, x_shape, batch_size_holder):
     deepnn.n_conv_layers = 4
     deconv_1_x = tf.cast(tf.ceil(tf.divide(x_shape[0], (pow(2, deepnn.n_conv_layers)))), tf.int32)
     deconv_1_y = tf.cast(tf.ceil(tf.divide(x_shape[1], (pow(2, deepnn.n_conv_layers)))), tf.int32)
+
+    # Maybe add a fully connected layer here, now that the output is so small?
     '''
     with tf.name_scope('deconv1'):
         stride1 = 2
@@ -227,32 +229,29 @@ def import_jp2_file(directory, type='training'):
     return jp2_file
 
 
-def enqueue(directories, q):
-    sys.stderr = open(str(os.getpid()) + '.err', 'w')
-    sys.stdout = open(str(os.getpid()) + '.out', 'w')
-    # print("Queue size: ", q._maxsize)
+def enqueue(directories, q, training_or_evaluation):
     for d in directories:
-        jp2_file = import_jp2_file(d)
-        data_file = import_data_file(d)
+        jp2_file = import_jp2_file(d, training_or_evaluation)
+        data_file = import_data_file(d, training_or_evaluation)
         if data_file is not None and jp2_file is not None:
-            try:
-                q.put({'image':jp2_file, 'topography': data_file}, block=True)
-            except:
-                sys.stderr.flush()
-                del jp2_file, data_file
+            q.put({'image':jp2_file, 'topography': data_file})
         sys.stdout.flush()
         sys.stderr.flush()
 
 
-def get_useful_directories(type='training'):
-    data_directories = os.listdir(FLAGS.data_dir + '/' + type)
+def get_useful_directories(training_or_evaluation):
+    data_directories = os.listdir(FLAGS.data_dir + '/' + training_or_evaluation)
     def shape_ok(d):
         if standard_input_size is None: return True
-        with open(FLAGS.data_dir + '/' + type + '/' + d + '/cropped_size.txt', 'r') as f:
+        with open(FLAGS.data_dir + '/' + training_or_evaluation + '/' + d + '/cropped_size.txt', 'r') as f:
             shape = [int(x) for x in f.readline().split(',')]
-            return all(x > standard_input_size + 2* border_trim for x in shape[:2])
+            return all(x > (standard_input_size + 2* border_trim) for x in shape[:2])
     data_directories = [x for x in data_directories if shape_ok(x)]
     return data_directories
+
+
+def lcm(a, b):
+        return int((a*b) / gcd(a, b))
 
 
 def main(_):
@@ -286,31 +285,17 @@ def main(_):
     train_writer = tf.summary.FileWriter(graph_location)
     train_writer.add_graph(tf.get_default_graph())
 
-    # Get a list of all the directories that contain good data
-    data_directories = get_useful_directories()
-
-    # Break off some of these directories into a separate test set
-    total_data = len(data_directories)
-    # also want to ensure that the total data is evenly divisible by number of batches and processes
     num_processes = 3  # number of processes used to populate the queue
-    def lcm(a, b):
-        return int((a*b) / gcd(a, b))
-    total_data -= total_data % lcm(batch_size, num_processes)
-    print(total_data)
-    training_directories = data_directories[0:total_data]
-    training_directories.sort(key= lambda x: random())  # x is unused, this is for shuffling
-
-    chunk_size = int(len(training_directories) / num_processes)
-    # Set up a Queue for asynchronously loading the data
-    training_data_queue = Manager().Queue(100)
-    args = [[training_directories[i:i+chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
-    processes = []
-    for arg in args:
-        p = Process(target=enqueue, args=arg)
-        p.start()
-        processes.append(p)
+    # Set up various parameters for the training set and evaluation set
+    training_directories = get_useful_directories('training')
+    total_training_data = len(training_directories) - len(training_directories) % lcm(batch_size, num_processes)
+    training_directories = training_directories[0:total_training_data]
+    training_chunk_size = int(len(training_directories) / num_processes)
 
     evaluation_dirs = get_useful_directories('evaluation')
+    total_eval_data = len(evaluation_dirs) - len(evaluation_dirs) % lcm(batch_size, num_processes)
+    evaluation_dirs = evaluation_dirs[0:total_eval_data]
+    eval_chunk_size = int(len(evaluation_dirs) / num_processes)
 
     # Set up the code to save the network and its parameters
     saver = tf.train.Saver()
@@ -352,18 +337,15 @@ def main(_):
 
 
 
-        def evaluate(epoch, batch_number):
-            evaluation_batch = get_evaluation_batch()
-            predictions = y_conv.eval(feed_dict={
-                x: evaluation_batch['images'], x_shape: evaluation_batch['images'][0].shape[:2], batch_size_holder: [batch_size]})
-            train_accuracy = loss.eval(feed_dict={
-                y_conv: predictions, y_: evaluation_batch['topographies']})
-            coefficient_of_determination = R2.eval(feed_dict={
-                y_conv: predictions, y_: evaluation_batch['topographies']})
+        def evaluate(epoch, batch_number, batch):
+            predictions = y_conv.eval(             feed_dict={x: batch['images'], x_shape: batch['images'][0].shape[:2], batch_size_holder: [batch_size]})
+            train_accuracy = loss.eval(            feed_dict={y_conv: predictions, y_: batch['topographies']})
+            coefficient_of_determination = R2.eval(feed_dict={y_conv: predictions, y_: batch['topographies']})
             stats_str = 'epoch %d, batch_number %d, evaluation loss: %.12g, eval accuracy: %.3g\n' % (epoch, batch_number, train_accuracy, coefficient_of_determination)
             print(stats_str)
             accuracy_log.write(stats_str)
             accuracy_log.flush()
+            return train_accuracy, coefficient_of_determination
 
 
         def save():
@@ -371,49 +353,55 @@ def main(_):
             saver.save(sess, backup_path)
 
 
-        def get_training_batch():
-            training_batch = {'images': [], 'topographies': []}
+        def get_batch(queue):
+            batch = {'images': [], 'topographies': []}
             for i in range(batch_size):
-                try:
-                    training_data = training_data_queue.get(block=True)
-                except queue.Empty as qe:
-                    print("Queue is empty")
-                    print([p.is_alive() for p in processes])
-                    continue
-                except:
-                    print("Failed to get data from queue")
-                    continue
-                training_batch['images'].append(training_data['image'])
-                training_batch['topographies'].append(training_data['topography'])
-            return training_batch if len(training_batch['images']) == batch_size else None
+                data = queue.get(block=True)
+                batch['images'].append(data['image'])
+                batch['topographies'].append(data['topography'])
+            return batch if len(batch['images']) == batch_size else None
+
 
 
         for epoch in range(10):
             print("Running epoch", epoch)
-            # Run training through the entire data set. Reaching the end of the dataset will be indicated by the thread
+            # Shuffle training directories and kick off processes to populate queue
+            training_directories.sort(key= lambda x: random())  # x is unused
+            training_data_queue = Manager().Queue(100)
+            args = [[training_directories[i:i + training_chunk_size], training_data_queue, 'training'] for i in range(0, len(training_directories), training_chunk_size)]
+            processes = []
+            for arg in args:
+                p = Process(target=enqueue, args=arg)
+                p.start()
+                processes.append(p)
+
+            # Run training through the entire data set. Reaching the end of the dataset will be indicated by the processes
             # stopping and the queue getting emptied
             batch_number = 0
             while (True in [p.is_alive() for p in processes]) or training_data_queue.empty() == False:
                 print("Creating batch... (queue size is", training_data_queue.qsize(),")")
-                training_batch = get_training_batch()
+                training_batch = get_batch(training_data_queue)
                 if training_batch is None:
                     print("Couldn't get training batch")
                     continue
-                print("Creating batch...done. Data point:",training_batch['topographies'][0][1][1])
-                print("Creating batch...done. Image point:",training_batch['images'][0][1,1,:])
+                print("Creating batch...done. Data point:", training_batch['topographies'][0][1][1])
+                print("Creating batch...done. Image point:", training_batch['images'][0][1,1,:])
 
-                print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...")
+                print("Running training", epoch, "-", batch_number, "/", total_training_data / batch_size, "...")
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
                 print(training_batch['images'][0].shape)
                 print(training_batch['topographies'][0].shape)
-                sess.run([train_step], feed_dict={x: training_batch['images'], x_shape: training_batch['images'][0].shape[:2], y_: training_batch['topographies'], batch_size_holder: [batch_size]},
+                sess.run([train_step], feed_dict={x: training_batch['images'],
+                                                  x_shape: training_batch['images'][0].shape[:2],
+                                                  y_: training_batch['topographies'],
+                                                  batch_size_holder: [batch_size]},
                          options=run_options, run_metadata=run_metadata)
-                print("Running training", epoch, "-", batch_number, "/", total_data / batch_size, "...done")
+                print("Running training", epoch, "-", batch_number, "/", total_training_data / batch_size, "...done")
                 train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
                 sys.stdout.flush()
                 if(batch_number % 40 == 0):
-                    evaluate(epoch, batch_number)
+                    evaluate(epoch, batch_number, get_evaluation_batch())
                     save()
 
                 # not sure if Python garbage collector is lagging behind or something, but this thing seems to take up
@@ -422,23 +410,33 @@ def main(_):
                 del run_options
                 del run_metadata
                 batch_number += 1
+            print("Epoch", epoch, "completed, evaluating...")
             for p in processes:
                 p.join()
             processes.clear()
-            # Now shuffle training directories and restart the thread
-            data_directories = get_useful_directories()
-            total_data = len(data_directories)
-            total_data -= total_data % lcm(batch_size, num_processes)
-            training_directories = data_directories[0:total_data]
-            chunk_size = int(len(training_directories) / num_processes)
-            training_directories.sort(key= lambda x: random())  # x is unused
-            # Create a new instance of the queue
-            training_data_queue = Manager().Queue(100)
-            args = [[training_directories[i:i + chunk_size], training_data_queue] for i in range(0, len(training_directories), chunk_size)]
+            # At the end of an epoch, evaluate over the entire evaluation set
+            evaluation_data_queue = Manager().Queue(100)
+            args = [[evaluation_dirs[i:i + eval_chunk_size], evaluation_data_queue, 'evaluation'] for i in range(0, len(evaluation_dirs), eval_chunk_size)]
             for arg in args:
                 p = Process(target=enqueue, args=arg)
                 p.start()
                 processes.append(p)
+            batch_number = 0
+            accuracies = []
+            coeffs = []
+            while (True in [p.is_alive() for p in processes]) or evaluation_data_queue.empty() == False:
+                accuracy, coeff = evaluate(epoch, batch_number, get_batch(evaluation_data_queue))
+                accuracies.append(accuracy)
+                coeffs.append(coeff)
+                batch_number += 1
+            print("Accuracy after epoch", epoch, ":", (sum(accuracies)/len(accuracies)))
+            print("R2 after epoch", epoch, ":", (sum(coeffs)/len(coeffs)))
+
+            # Clean up
+            for p in processes:
+                p.join()
+            processes.clear()
+
 
 
 if __name__ == '__main__':
