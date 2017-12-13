@@ -7,9 +7,11 @@
 
 # Python libraries (alphabetical)
 import argparse
+from collections import defaultdict
 import glymur
 from math import ceil, gcd
 from multiprocessing import Queue, Process, Manager
+from FIFORedisQueue import Queue as MyQueue
 import numpy as np
 import os
 import queue
@@ -180,9 +182,12 @@ def calc_newshape(shape):
 
 
 def import_data_file(directory, type='training'):
+    rotation = directory[1]
+    directory = directory[0]
     topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, type, directory)) if x[-5:] == '.data'][0]
     data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
     if any(dimension < ((border_trim * 2) * 1.5) for dimension in data.shape):
+       print("Rejecting", directory, "for low size")
        del data
        return None
     data = data[border_trim:-border_trim, border_trim:-border_trim]
@@ -207,14 +212,18 @@ def import_data_file(directory, type='training'):
     reduced_data += 1 # This should guarantee that all out data is >0, i.e. within the range of a relu unit
     reduced_data *= 1000 # maybe I have a vanishing gradient problem and maybe this will help?
     del data
+    reduced_data = np.rot90(reduced_data, rotation/90)
     return reduced_data
 
 
 def import_jp2_file(directory, type='training'):
+    rotation = directory[1]
+    directory = directory[0]
     jp2_filename = os.path.join(FLAGS.data_dir, type, directory, 'cropped.jp2')
     try:
         jp2_file = glymur.Jp2k(jp2_filename).read()
         if any(dimension < ((border_trim * 2) * 1.5) for dimension in jp2_file.shape[:2]):
+           print("Rejecting", directory, "for low size (jp2)")
            del jp2_file
            return None
         jp2_file = jp2_file[border_trim:-border_trim, border_trim:-border_trim, :]
@@ -226,17 +235,27 @@ def import_jp2_file(directory, type='training'):
     except Exception as e:
         print(str(e))
         jp2_file = None
+    jp2_file = np.rot90(jp2_file, rotation/90)
     return jp2_file
 
 
 def enqueue(directories, q, training_or_evaluation):
+    pid = os.getpid()
+    total = 0
     for d in directories:
         jp2_file = import_jp2_file(d, training_or_evaluation)
         data_file = import_data_file(d, training_or_evaluation)
         if data_file is not None and jp2_file is not None:
-            q.put({'image':jp2_file, 'topography': data_file})
+            print(pid, "Putting...", q)
+            try:
+                q.put({'image':jp2_file, 'topography': data_file}, timeout=300)
+                total += 1
+            except Exception as e:
+                print(pid, "failed to put", str(e))
+            print(pid, total)
         sys.stdout.flush()
         sys.stderr.flush()
+    print("Done")
 
 
 def get_useful_directories(training_or_evaluation):
@@ -288,11 +307,22 @@ def main(_):
     num_processes = 3  # number of processes used to populate the queue
     # Set up various parameters for the training set and evaluation set
     training_directories = get_useful_directories('training')
+    # Inflate the directories by a factor of 4 by adding a rotation to each one
+    def add_rotation_to_directories(directories):
+        new_directories = []
+        for d in directories:
+            new_directories.append((d, 0))
+            new_directories.append((d, 90))
+            new_directories.append((d, 180))
+            new_directories.append((d, 270))
+        return new_directories
+    training_directories = add_rotation_to_directories(training_directories)
     total_training_data = len(training_directories) - len(training_directories) % lcm(batch_size, num_processes)
     training_directories = training_directories[0:total_training_data]
     training_chunk_size = int(len(training_directories) / num_processes)
 
     evaluation_dirs = get_useful_directories('evaluation')
+    evaluation_dirs = [(d, 0) for d in evaluation_dirs]
     total_eval_data = len(evaluation_dirs) - len(evaluation_dirs) % lcm(batch_size, num_processes)
     evaluation_dirs = evaluation_dirs[0:total_eval_data]
     eval_chunk_size = int(len(evaluation_dirs) / num_processes)
@@ -352,13 +382,19 @@ def main(_):
             saver.save(sess, model_path)
             saver.save(sess, backup_path)
 
-
+        total_received = defaultdict(lambda: 0)
         def get_batch(queue):
             batch = {'images': [], 'topographies': []}
             for i in range(batch_size):
-                data = queue.get(block=True)
-                batch['images'].append(data['image'])
-                batch['topographies'].append(data['topography'])
+                print("Getting...", queue)
+                try:
+                    data = queue.get(block=True, timeout=300)
+                    total_received[str(queue)] += 1
+                    batch['images'].append(data['image'])
+                    batch['topographies'].append(data['topography'])
+                except Exception as e:
+                    print("Failed to get", str(e))
+                print(total_received)
             return batch if len(batch['images']) == batch_size else None
 
 
@@ -367,7 +403,8 @@ def main(_):
             print("Running epoch", epoch)
             # Shuffle training directories and kick off processes to populate queue
             training_directories.sort(key= lambda x: random())  # x is unused
-            training_data_queue = Manager().Queue(100)
+            training_data_queue = MyQueue(100, name=('training' + str(epoch)))
+            print("Training data queue:", training_data_queue)
             args = [[training_directories[i:i + training_chunk_size], training_data_queue, 'training'] for i in range(0, len(training_directories), training_chunk_size)]
             processes = []
             for arg in args:
@@ -415,7 +452,8 @@ def main(_):
                 p.join()
             processes.clear()
             # At the end of an epoch, evaluate over the entire evaluation set
-            evaluation_data_queue = Manager().Queue(100)
+            evaluation_data_queue = MyQueue(100, name=('evaluation'+str(epoch)))
+            print("Evaluation data queue:", evaluation_data_queue)
             args = [[evaluation_dirs[i:i + eval_chunk_size], evaluation_data_queue, 'evaluation'] for i in range(0, len(evaluation_dirs), eval_chunk_size)]
             for arg in args:
                 p = Process(target=enqueue, args=arg)
