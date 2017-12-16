@@ -16,6 +16,8 @@ class Queue(object):
 
 	def put(self, data, block=True, timeout=0):
 		# Wait for get operations to decrease the queue size
+		# There appears to be a race condition here. Two processes might read the queue size as 99, and then both push.
+		# Ideally there should be some sort of mutex here to prevent that from happening
 		while self.qsize() >= self.maxsize:
 			print(getpid(), "Waiting for queue to free up")
 			sleep(1)

@@ -2,7 +2,7 @@ FROM nvidia/cuda:8.0-cudnn6-devel
 # Update the library path so that cupti can be found (for tensorflow logging stuff)
 ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/usr/local/cuda-8.0/extras/CUPTI/lib64/
 # Install basic utilities
-RUN apt-get update && apt-get install -y sudo cmake git python3 python3-pip python3-dev wget vim && pip3 install --upgrade pip
+RUN apt-get update && apt-get install -y sudo cmake git python3 python3-pip python3-dev wget vim redis-server && pip3 install --upgrade pip
 # Install tensorflow related things. Change this line for use with another machine learning framework
 RUN pip3 install tensorflow-gpu
 # Create a docker user, give him the password docker, and add him to the sudoers group
@@ -21,7 +21,7 @@ ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/usr/local/lib
 WORKDIR /
 RUN rm -rf /tmp/workdir
 # Other project specific dependencies
-RUN pip3 install pybind11 glymur requests scikit-image python-dateutil plotly
+RUN pip3 install pybind11 glymur requests scikit-image python-dateutil plotly redis
 RUN apt-get install -y libopenjp2-7-dev
 # For some reason the following packages/env variables are necessary for vim to work properly. Without them it permanently hangs the terminal you're in (docker instance can still be connected to from other terminals though)
 RUN apt-get install -y language-pack-en-base locales
@@ -31,4 +31,4 @@ ENV LC_ALL=en_US.UTF-8
 # Switch to the docker user and his home directory
 USER docker
 WORKDIR /home/docker
-CMD /bin/bash
+CMD redis-server --save "" --daemonize yes && /bin/bash

@@ -232,10 +232,10 @@ def import_jp2_file(directory, type='training'):
         jp2_file = jp2_file.astype(float)
         jp2_file -= np.mean(jp2_file, axis=0)
         jp2_file /= np.std(jp2_file, axis=0)
+        jp2_file = np.rot90(jp2_file, rotation/90)
     except Exception as e:
         print(str(e))
-        jp2_file = None
-    jp2_file = np.rot90(jp2_file, rotation/90)
+        return None
     return jp2_file
 
 
@@ -243,8 +243,18 @@ def enqueue(directories, q, training_or_evaluation):
     pid = os.getpid()
     total = 0
     for d in directories:
-        jp2_file = import_jp2_file(d, training_or_evaluation)
-        data_file = import_data_file(d, training_or_evaluation)
+        print(pid, "Importing jp2 file ", d[0])
+        try:
+            jp2_file = import_jp2_file(d, training_or_evaluation)
+        except Exception as e:
+            print(pid, "Failed to import jp2_file")
+            jp2_file = None
+        print(pid, "Importing data file ", d[0])
+        try:
+            data_file = import_data_file(d, training_or_evaluation)
+        except Exception as e:
+            print(pid, "Failed to import data_file")
+            data_file = None
         if data_file is not None and jp2_file is not None:
             print(pid, "Putting...", q)
             try:
@@ -304,7 +314,7 @@ def main(_):
     train_writer = tf.summary.FileWriter(graph_location)
     train_writer.add_graph(tf.get_default_graph())
 
-    num_processes = 3  # number of processes used to populate the queue
+    num_processes = 4  # number of processes used to populate the queue
     # Set up various parameters for the training set and evaluation set
     training_directories = get_useful_directories('training')
     # Inflate the directories by a factor of 4 by adding a rotation to each one
