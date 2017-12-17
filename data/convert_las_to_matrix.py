@@ -13,12 +13,12 @@ def convert(folder_name):
     except:
         return
 
-    if os.path.exists('failed.txt') or not os.path.exists('cropped'):  # This probably indicated the crop failed. In this case, remove the las file so it doesn't take up space
+    if os.path.exists('failed.txt') or not os.path.exists('cropped_size.txt'):  # This probably indicated the crop failed. In this case, remove the las file so it doesn't take up space
         os.remove(las_filename)
         return
 
     out_filename = las_filename.split('.')[0] + '.data'
-    with open('cropped','r') as f:
+    with open('cropped_size.txt','r') as f:
          [desired_rows, desired_cols, channels] = [int(x) for x in f.readline().split(',')]
     success = convert_las_to_matrix_and_store(las_filename, desired_rows, desired_cols, out_filename)
     os.remove(las_filename)

@@ -86,7 +86,7 @@ def crop(folder_name):
             f.write(str(e))
         return
 
-    with open('cropped', 'w') as f:  # This file indicates success to the pipeline processor
+    with open('cropped_size.txt', 'w') as f:  # This file indicates success to the pipeline processor
         f.write('%d,%d,%d' % tuple(newfile.shape))
 
 

@@ -93,7 +93,7 @@ while [[ $(ps -p $DOWNLOADER_PID | wc -l) -eq 2 ]] || [[ $(ls $DATA_DIR/preproce
         if [[ -e $DATA_DIR/preprocessing/$folder/failed.txt ]]; then
             echo "Moving $folder to failed"
             mv $DATA_DIR/preprocessing/${folder} $DATA_DIR/failed/
-        elif [[ -e $DATA_DIR/preprocessing/$folder/cropped ]] && [[ -e $DATA_DIR/preprocessing/$folder/pickled ]]; then
+        elif [[ -e $DATA_DIR/preprocessing/$folder/cropped_size.txt ]] && [[ -e $DATA_DIR/preprocessing/$folder/pickled ]]; then
             echo "Moving $folder to completed"
             mv $DATA_DIR/preprocessing/${folder} $DATA_DIR/completed/
         fi
