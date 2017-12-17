@@ -243,18 +243,8 @@ def enqueue(directories, q, training_or_evaluation):
     pid = os.getpid()
     total = 0
     for d in directories:
-        print(pid, "Importing jp2 file ", d[0])
-        try:
-            jp2_file = import_jp2_file(d, training_or_evaluation)
-        except Exception as e:
-            print(pid, "Failed to import jp2_file")
-            jp2_file = None
-        print(pid, "Importing data file ", d[0])
-        try:
-            data_file = import_data_file(d, training_or_evaluation)
-        except Exception as e:
-            print(pid, "Failed to import data_file")
-            data_file = None
+        jp2_file = import_jp2_file(d, training_or_evaluation)
+        data_file = import_data_file(d, training_or_evaluation)
         if data_file is not None and jp2_file is not None:
             print(pid, "Putting...", q)
             try:
@@ -265,7 +255,7 @@ def enqueue(directories, q, training_or_evaluation):
             print(pid, total)
         sys.stdout.flush()
         sys.stderr.flush()
-    print("Done")
+    print(pid, "Done")
 
 
 def get_useful_directories(training_or_evaluation):
@@ -396,7 +386,6 @@ def main(_):
         def get_batch(queue):
             batch = {'images': [], 'topographies': []}
             for i in range(batch_size):
-                print("Getting...", queue)
                 try:
                     data = queue.get(block=True, timeout=300)
                     total_received[str(queue)] += 1
@@ -404,7 +393,6 @@ def main(_):
                     batch['topographies'].append(data['topography'])
                 except Exception as e:
                     print("Failed to get", str(e))
-                print(total_received)
             return batch if len(batch['images']) == batch_size else None
 
 
@@ -413,7 +401,7 @@ def main(_):
             print("Running epoch", epoch)
             # Shuffle training directories and kick off processes to populate queue
             training_directories.sort(key= lambda x: random())  # x is unused
-            training_data_queue = MyQueue(100, name=('training' + str(epoch)))
+            training_data_queue = MyQueue(300, name=('training' + str(epoch)))
             print("Training data queue:", training_data_queue)
             args = [[training_directories[i:i + training_chunk_size], training_data_queue, 'training'] for i in range(0, len(training_directories), training_chunk_size)]
             processes = []
@@ -435,34 +423,25 @@ def main(_):
                 print("Creating batch...done. Image point:", training_batch['images'][0][1,1,:])
 
                 print("Running training", epoch, "-", batch_number, "/", total_training_data / batch_size, "...")
-                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-                run_metadata = tf.RunMetadata()
                 print(training_batch['images'][0].shape)
                 print(training_batch['topographies'][0].shape)
                 sess.run([train_step], feed_dict={x: training_batch['images'],
                                                   x_shape: training_batch['images'][0].shape[:2],
                                                   y_: training_batch['topographies'],
-                                                  batch_size_holder: [batch_size]},
-                         options=run_options, run_metadata=run_metadata)
+                                                  batch_size_holder: [batch_size]})
                 print("Running training", epoch, "-", batch_number, "/", total_training_data / batch_size, "...done")
-                train_writer.add_run_metadata(run_metadata, 'step %d - %d' % (epoch, batch_number))
                 sys.stdout.flush()
-                if(batch_number % 40 == 0):
+                if(batch_number % 200 == 0):
                     evaluate(epoch, batch_number, get_evaluation_batch())
                     save()
 
-                # not sure if Python garbage collector is lagging behind or something, but this thing seems to take up
-                # a lot more RAM than I think it should. I'll manually delete data here to try to avoid eating up all RAM
-                del training_batch
-                del run_options
-                del run_metadata
                 batch_number += 1
             print("Epoch", epoch, "completed, evaluating...")
             for p in processes:
                 p.join()
             processes.clear()
             # At the end of an epoch, evaluate over the entire evaluation set
-            evaluation_data_queue = MyQueue(100, name=('evaluation'+str(epoch)))
+            evaluation_data_queue = MyQueue(300, name=('evaluation'+str(epoch)))
             print("Evaluation data queue:", evaluation_data_queue)
             args = [[evaluation_dirs[i:i + eval_chunk_size], evaluation_data_queue, 'evaluation'] for i in range(0, len(evaluation_dirs), eval_chunk_size)]
             for arg in args:
