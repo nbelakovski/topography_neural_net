@@ -181,9 +181,8 @@ def calc_newshape(shape):
     return (newx, newy)
 
 
-def import_data_file(directory, type='training'):
-    rotation = directory[1]
-    directory = directory[0]
+def import_data_file(data_info, type='training'):
+    directory = data_info['directory']
     topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, type, directory)) if x[-5:] == '.data'][0]
     data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
     if any(dimension < ((border_trim * 2) * 1.5) for dimension in data.shape):
@@ -195,11 +194,7 @@ def import_data_file(directory, type='training'):
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
     data = data[0:newx, 0:newy]
-    rcode = interpolate_zeros_2(data)
-    if rcode == -1:
-        print("Detected datafile with bad row in", directory)
-        del data
-        return None
+    interpolate_zeros_2(data)
     reduced_data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.mean) # pool down
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
@@ -212,13 +207,12 @@ def import_data_file(directory, type='training'):
     reduced_data += 1 # This should guarantee that all out data is >0, i.e. within the range of a relu unit
     reduced_data *= 1000 # maybe I have a vanishing gradient problem and maybe this will help?
     del data
-    reduced_data = np.rot90(reduced_data, rotation/90)
+    reduced_data = np.rot90(reduced_data, data_info['rotation']/90)
     return reduced_data
 
 
-def import_jp2_file(directory, type='training'):
-    rotation = directory[1]
-    directory = directory[0]
+def import_jp2_file(image_info, type='training'):
+    directory = image_info['directory']
     jp2_filename = os.path.join(FLAGS.data_dir, type, directory, 'cropped.jp2')
     try:
         jp2_file = glymur.Jp2k(jp2_filename).read()
@@ -232,7 +226,7 @@ def import_jp2_file(directory, type='training'):
         jp2_file = jp2_file.astype(float)
         jp2_file -= np.mean(jp2_file, axis=0)
         jp2_file /= np.std(jp2_file, axis=0)
-        jp2_file = np.rot90(jp2_file, rotation/90)
+        jp2_file = np.rot90(jp2_file, image_info['rotation']/90)
     except Exception as e:
         print(str(e))
         return None
@@ -308,21 +302,26 @@ def main(_):
     # Set up various parameters for the training set and evaluation set
     training_directories = get_useful_directories('training')
     # Inflate the directories by a factor of 4 by adding a rotation to each one
-    def add_rotation_to_directories(directories):
+    def add_data_augmentation_information(d):
+        rval = []
+        # rotations and translations:
+        for rotation in [0, 90, 180, 270]:
+            for translation in ["None"]:
+                rval.append({'directory': d, 'rotation': rotation, 'translation': translation})
+        return rval
+    def augment_data(directories):
         new_directories = []
         for d in directories:
-            new_directories.append((d, 0))
-            new_directories.append((d, 90))
-            new_directories.append((d, 180))
-            new_directories.append((d, 270))
+            new_directories.extend(add_data_augmentation_information(d))
         return new_directories
-    training_directories = add_rotation_to_directories(training_directories)
+
+    training_directories = augment_data(training_directories)
     total_training_data = len(training_directories) - len(training_directories) % lcm(batch_size, num_processes)
     training_directories = training_directories[0:total_training_data]
     training_chunk_size = int(len(training_directories) / num_processes)
 
     evaluation_dirs = get_useful_directories('evaluation')
-    evaluation_dirs = [(d, 0) for d in evaluation_dirs]
+    evaluation_dirs = [{'directory': d, 'rotation': 0, 'translation': 'None'} for d in evaluation_dirs]
     total_eval_data = len(evaluation_dirs) - len(evaluation_dirs) % lcm(batch_size, num_processes)
     evaluation_dirs = evaluation_dirs[0:total_eval_data]
     eval_chunk_size = int(len(evaluation_dirs) / num_processes)
@@ -401,7 +400,7 @@ def main(_):
             print("Running epoch", epoch)
             # Shuffle training directories and kick off processes to populate queue
             training_directories.sort(key= lambda x: random())  # x is unused
-            training_data_queue = MyQueue(300, name=('training' + str(epoch)))
+            training_data_queue = MyQueue(300, name='training'+str(epoch))
             print("Training data queue:", training_data_queue)
             args = [[training_directories[i:i + training_chunk_size], training_data_queue, 'training'] for i in range(0, len(training_directories), training_chunk_size)]
             processes = []
@@ -441,7 +440,7 @@ def main(_):
                 p.join()
             processes.clear()
             # At the end of an epoch, evaluate over the entire evaluation set
-            evaluation_data_queue = MyQueue(300, name=('evaluation'+str(epoch)))
+            evaluation_data_queue = MyQueue(300, name='evaluation'+str(epoch))
             print("Evaluation data queue:", evaluation_data_queue)
             args = [[evaluation_dirs[i:i + eval_chunk_size], evaluation_data_queue, 'evaluation'] for i in range(0, len(evaluation_dirs), eval_chunk_size)]
             for arg in args:
@@ -463,6 +462,8 @@ def main(_):
             for p in processes:
                 p.join()
             processes.clear()
+
+            # Should add code to save here, so that I can keep track of the network via epochs, and just use the eval save for some inference
 
 
 

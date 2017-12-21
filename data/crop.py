@@ -72,8 +72,6 @@ def crop(folder_name):
     newwidth2 = min(width, int(newx2 * width))
     newheight1 = max(0, int(newy1 * height))
     newheight2 = min(height, int(newy2 * height))
-    # In the first run, this came out to an image of 993X1009 pixels. It may be prudent to shrink this down to 950x950
-    # since the net needs a consistent input shape, but we'll deal with that after trying a few more
 
     # d)
     cropped = jp2_file[newheight1:newheight2, newwidth1:newwidth2, :3]  # only get the first 3 channels, no need for alpha
@@ -88,6 +86,10 @@ def crop(folder_name):
 
     with open('cropped_size.txt', 'w') as f:  # This file indicates success to the pipeline processor
         f.write('%d,%d,%d' % tuple(newfile.shape))
+
+    if newfile.shape[0] < 995 or newfile.shape[1] < 995:
+        with open('failed.txt', 'a') as f:
+            f.write("dimensions too small")
 
 
 with open(sys.argv[1], 'r') as f:

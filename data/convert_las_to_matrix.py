@@ -4,6 +4,11 @@ import numpy
 import os
 from utils import convert_las_to_matrix_and_store
 
+# I dislike modifying the path like this, but it's the most straightforward way to get this module loaded
+# without a more serious rearrangment of the directory structure or adding some dependcy like a proper PYTHONPATH
+sys.path.append(os.path.join(os.getcwd(), '..', 'tools'))
+from tools import read_data
+
 
 def convert(folder_name):
     os.chdir(folder_name)
@@ -23,8 +28,16 @@ def convert(folder_name):
     success = convert_las_to_matrix_and_store(las_filename, desired_rows, desired_cols, out_filename)
     os.remove(las_filename)
     if success:
-        with open('pickled', 'w') as f:
-            f.write('')  # This file indicates success to the pipeline
+        # open up the file and count the 0's in the matrix
+        # If there are too many, reject it
+        m = read_data(out_filename)
+        zeros = m.size - numpy.count_nonzero(m)
+        if zeros < 125000:
+            with open('pickled', 'w') as f:
+                f.write('')  # This file indicates success to the pipeline
+        else:
+            with open('failed.txt', 'a') as f:
+                f.write("Found " + str(zeros) + " zeros")
 
 
 with open(sys.argv[1], 'r') as f:
