@@ -33,8 +33,8 @@ Below is an example of the end goal. On the left is a satellite image. In the mi
 topography data as taken from a LIDAR scan (heavily subsampled), and on the right is the output of the neural net applied to the image
 on the left (current image is from partial training). The image on the left is not in the training set.
 {% raw %}
-<iframe width="1100" height="1100" align="right" src="/docs/plots.html" frameborder="0"></iframe>
-<br><br><br><br><br><br><br><br><br><br><img width="450" height="475" align="left" src="/docs/cropped.jpg">
+<iframe width="1100" height="1100" align="right" src="plots.html" frameborder="0"></iframe>
+<br><br><br><br><br><br><br><br><br><br><img width="450" height="475" align="left" src="cropped.jpg">
 {% endraw %}
 
 ### Data source
