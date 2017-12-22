@@ -8,6 +8,7 @@
 # Python libraries (alphabetical)
 import argparse
 from collections import defaultdict
+from glob import glob
 import glymur
 from math import ceil, gcd
 from multiprocessing import Queue, Process, Manager
@@ -30,7 +31,7 @@ FLAGS = None
 max_input_size = 1200
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
 batch_size = 3
-standard_input_size = 704  # set this to None to allow the use of full size images
+standard_input_size = 720  # set this to None to allow the use of full size images
 
 
 def deepnn(x, x_shape, batch_size_holder):
@@ -74,7 +75,7 @@ def deepnn(x, x_shape, batch_size_holder):
         w_conv3 = weight_variable([4, 4, conv2_maps, conv3_maps])
         b_conv3 = bias_variable([conv3_maps])
         h_conv3 = relu(conv2d(h_pool2, w_conv3) + b_conv3)
-#
+
     # Third pooling layer.
     with tf.name_scope('pool3'):
         h_pool3 = max_pool_2x2(h_conv3)
@@ -95,38 +96,11 @@ def deepnn(x, x_shape, batch_size_holder):
     deconv_1_x = tf.cast(tf.ceil(tf.divide(x_shape[0], (pow(2, deepnn.n_conv_layers)))), tf.int32)
     deconv_1_y = tf.cast(tf.ceil(tf.divide(x_shape[1], (pow(2, deepnn.n_conv_layers)))), tf.int32)
 
-    # Maybe add a fully connected layer here, now that the output is so small?
-    '''
-    with tf.name_scope('deconv1'):
-        stride1 = 2
-        deconv1_maps = 50
-        w_deconv1 = weight_variable([6, 6, deconv1_maps, conv4_maps])  # height, width, out channels, in channels
-        out_shape = [batch_size_holder[0], deconv_1_x * stride1, deconv_1_y * stride1, deconv1_maps]
-        h_deconv1 = relu(deconv2d(h_pool4, w_deconv1, out_shape, [1, stride1, stride1, 1]))
-
-    # Second deconvolutional layer
-    with tf.name_scope('deconv2'):
-        stride2 = 2
-        deconv2_maps = 25
-        w_deconv2 = weight_variable([5, 5, deconv2_maps, deconv1_maps])
-        out_shape = [batch_size_holder[0], deconv_1_x * stride1 * stride2, deconv_1_y * stride1 * stride2, deconv2_maps]
-        h_deconv2 = relu(deconv2d(h_deconv1, w_deconv2, out_shape, [1, stride2, stride2, 1]))
-
-    # Third deconvolutional layer
-    with tf.name_scope('deconv3'):
-        stride3 = 2
-        w_deconv3 = weight_variable([4, 4, 1, deconv2_maps])
-        out_shape = [batch_size_holder[0], deconv_1_x * stride1 * stride2 * stride3, deconv_1_y * stride1 * stride2 * stride3, 1]
-        h_deconv3 = relu(deconv2d(h_deconv2, w_deconv3, out_shape, [1, stride3, stride3, 1]))
-
-    final_size = (deconv_1_x * stride1 * stride2 * stride3, deconv_1_y * stride1 * stride2 * stride3)
-    '''
     final_size = (deconv_1_x, deconv_1_y)
     print(final_size)
     with tf.name_scope('output'):
         # For use in the loss function, and in the inference script, rearrange the last layer to remove batch size and
         # the reference to the single channel
-        # y_conv = tf.reshape(h_deconv3, [-1, deepnn.output_size, deepnn.output_size], name="final_op")
         y_conv = tf.reshape(h_pool4, [-1, final_size[0], final_size[1]], name="final_op")
     return y_conv
 
@@ -181,56 +155,117 @@ def calc_newshape(shape):
     return (newx, newy)
 
 
-def import_data_file(data_info, type='training'):
+"""
+============================================================================================================
+============================================================================================================
+============================================================================================================
+START FUNCTION FOR LOADING DATA INTO MEMORY
+============================================================================================================
+============================================================================================================
+============================================================================================================
+"""
+
+
+def load_data_file(data_info, type='training'):
     directory = data_info['directory']
-    topo_filename = [x for x in os.listdir(os.path.join(FLAGS.data_dir, type, directory)) if x[-5:] == '.data'][0]
+    topo_filename = glob(os.path.join(FLAGS.data_dir, type, directory, '*data'))[0]
     data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
-    if any(dimension < ((border_trim * 2) * 1.5) for dimension in data.shape):
-       print("Rejecting", directory, "for low size")
-       del data
-       return None
-    data = data[border_trim:-border_trim, border_trim:-border_trim]
-    data = np.flipud(data) # flip it around so that the data points match the pixel layout
+    return data
+
+def crop_data_file(data, data_info):
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
-    data = data[0:newx, 0:newy]
-    interpolate_zeros_2(data)
-    reduced_data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.mean) # pool down
+    if data_info['translation'] == "UL":
+        data = data[0:newx, 0:newy]
+    elif data_info['translation'] == "UR":
+        data = data[0:newx, -newy:]
+    elif data_info['translation'] == "BL":
+        data = data[-newx:, 0:newy]
+    elif data_info['translation'] == "BR":
+        data = data[-newx:, -newy:]
+    return data
+
+def normalize_data_file(data):
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
     # so we normalize the data by subtracting the mean of itself from itself. This should enable the net to learn
     # relative topography. It's also helpful that it's a fast operation
-    reduced_data = reduced_data.astype(float)
-    reduced_data -= reduced_data.mean()
+    data = data.astype(float)
+    data -= data.mean()
     normalization_factor = 600000  # this number came from an analysis of the entire set. goal is normalization, i.e. get the data in a range from -1 to 1
-    reduced_data /= normalization_factor
-    reduced_data /= 2 # this gets the data set into a range of -0.5 to 0.5, roughly
-    reduced_data += 1 # This should guarantee that all out data is >0, i.e. within the range of a relu unit
-    reduced_data *= 1000 # maybe I have a vanishing gradient problem and maybe this will help?
-    del data
-    reduced_data = np.rot90(reduced_data, data_info['rotation']/90)
-    return reduced_data
+    data /= normalization_factor
+    data /= 2 # this gets the data set into a range of -0.5 to 0.5, roughly
+    data += 1 # This should guarantee that all out data is >0, i.e. within the range of a relu unit
+    data *= 1000 # maybe I have a vanishing gradient problem and maybe this will help?
+    return data
+
+def import_data_file(data_info, type='training'):
+    data = load_data_file(data_info, type)
+    data = data[border_trim:-border_trim, border_trim:-border_trim]
+    data = np.flipud(data) # flip it around so that the data points match the pixel layout
+    data = crop_data_file(data, data_info)
+    data = np.rot90(data, data_info['rotation']/90)
+    interpolate_zeros_2(data)
+    data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.mean) # pool down
+    data = normalize_data_file(data)
+    return data
 
 
-def import_jp2_file(image_info, type='training'):
+"""
+============================================================================================================
+LOADING JP2 FILE FUNCTIONS
+============================================================================================================
+"""
+
+
+def load_jp2_file(image_info, type='training'):
     directory = image_info['directory']
     jp2_filename = os.path.join(FLAGS.data_dir, type, directory, 'cropped.jp2')
     try:
-        jp2_file = glymur.Jp2k(jp2_filename).read()
-        if any(dimension < ((border_trim * 2) * 1.5) for dimension in jp2_file.shape[:2]):
-           print("Rejecting", directory, "for low size (jp2)")
-           del jp2_file
-           return None
-        jp2_file = jp2_file[border_trim:-border_trim, border_trim:-border_trim, :]
-        newx, newy = calc_newshape(jp2_file.shape)
-        jp2_file = jp2_file[0:newx, 0:newy, :]
-        jp2_file = jp2_file.astype(float)
-        jp2_file -= np.mean(jp2_file, axis=0)
-        jp2_file /= np.std(jp2_file, axis=0)
-        jp2_file = np.rot90(jp2_file, image_info['rotation']/90)
+        return glymur.Jp2k(jp2_filename).read()
     except Exception as e:
         print(str(e))
         return None
+
+def crop_jp2_file(jp2_file, image_info):
+    newx, newy = calc_newshape(jp2_file.shape)
+    # Translate here:
+    if image_info['translation'] == "UL":
+        jp2_file = jp2_file[0:newx, 0:newy, :]
+    elif image_info['translation'] == "UR":
+        jp2_file = jp2_file[0:newx, -newy:, :]
+    elif image_info['translation'] == "BL":
+        jp2_file = jp2_file[-newx:, 0:newy, :]
+    elif image_info['translation'] == "BR":
+        jp2_file = jp2_file[-newx:, -newy:, :]
     return jp2_file
+
+def normalize_jp2_file(jp2_file):
+    jp2_file = jp2_file.astype(float)
+    jp2_file -= np.mean(jp2_file, axis=0)
+    jp2_file /= np.std(jp2_file, axis=0)
+    return jp2_file
+
+def import_jp2_file(image_info, type='training'):
+    jp2_file = load_jp2_file(image_info, type)
+    if jp2_file is not None:
+        jp2_file = jp2_file[border_trim:-border_trim, border_trim:-border_trim, :]
+        jp2_file = crop_jp2_file(jp2_file, image_info)
+        jp2_file = np.rot90(jp2_file, image_info['rotation']/90)
+        jp2_file = normalize_jp2_file(jp2_file)
+    else:
+        return None
+    return jp2_file
+
+
+"""
+============================================================================================================
+============================================================================================================
+============================================================================================================
+DONE FUNCTIONS FOR LOADING DATA INTO MEMORY
+============================================================================================================
+============================================================================================================
+============================================================================================================
+"""
 
 
 def enqueue(directories, q, training_or_evaluation):
@@ -298,7 +333,7 @@ def main(_):
     train_writer = tf.summary.FileWriter(graph_location)
     train_writer.add_graph(tf.get_default_graph())
 
-    num_processes = 4  # number of processes used to populate the queue
+    num_processes = 3  # number of processes used to populate the queue
     # Set up various parameters for the training set and evaluation set
     training_directories = get_useful_directories('training')
     # Inflate the directories by a factor of 4 by adding a rotation to each one
@@ -306,7 +341,7 @@ def main(_):
         rval = []
         # rotations and translations:
         for rotation in [0, 90, 180, 270]:
-            for translation in ["None"]:
+            for translation in ["UL", "UR", "BL", "BR"]:
                 rval.append({'directory': d, 'rotation': rotation, 'translation': translation})
         return rval
     def augment_data(directories):
@@ -315,13 +350,15 @@ def main(_):
             new_directories.extend(add_data_augmentation_information(d))
         return new_directories
 
+    print("total data:", len(training_directories))
     training_directories = augment_data(training_directories)
+    print("augmented data:", len(training_directories))
     total_training_data = len(training_directories) - len(training_directories) % lcm(batch_size, num_processes)
     training_directories = training_directories[0:total_training_data]
     training_chunk_size = int(len(training_directories) / num_processes)
 
     evaluation_dirs = get_useful_directories('evaluation')
-    evaluation_dirs = [{'directory': d, 'rotation': 0, 'translation': 'None'} for d in evaluation_dirs]
+    evaluation_dirs = [{'directory': d, 'rotation': 0, 'translation': 'UL'} for d in evaluation_dirs]
     total_eval_data = len(evaluation_dirs) - len(evaluation_dirs) % lcm(batch_size, num_processes)
     evaluation_dirs = evaluation_dirs[0:total_eval_data]
     eval_chunk_size = int(len(evaluation_dirs) / num_processes)

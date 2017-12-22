@@ -9,6 +9,7 @@ class Queue(object):
 		self.maxsize = maxsize
 		self.name = name
 		self.conn = redis.StrictRedis(host='localhost', port=6379, db=0)
+		self.conn.flushall()
 
 	def get(self, block=True, timeout=0):
 		data = self.conn.blpop(self.name)
