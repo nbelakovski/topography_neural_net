@@ -3,7 +3,7 @@ title: Topography Neural Net
 tag_text: Topography Neural Net
 description: A responsive template for publishing single-page websites, articles that are easy on the eyes
 url: "http://127.0.0.1:4000"
-baseurl: ""
+baseurl: "docs"
 
 font-awesome-include: false # make this false if you don't need font-awesome
 
