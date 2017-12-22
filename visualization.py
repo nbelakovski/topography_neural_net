@@ -44,7 +44,7 @@ camera = dict(
 
 # Grab the image associated with the lidar dataset to display next to the 3d surface plot. For now, images will be
 # stored in my github
-image_source = 'https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/sample_data/01824c/cropped.jpg'
+image_source = 'https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/sample_data/593775/cropped.jpg'
 layout = go.Layout(
     title='Estimating Topography from Image Data (Work in Progress)' + '<br><br>' + '[original image, original topography, estimated topography]',
     autosize=True,
