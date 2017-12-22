@@ -42,44 +42,16 @@ camera = dict(
         eye=dict(x=0, y=-.4, z=2.25)
 )
 
-# Grab the image associated with the lidar dataset to display next to the 3d surface plot. For now, images will be
-# stored in my github
-image_source = 'https://raw.githubusercontent.com/nbelakovski/topography_neural_net/master/sample_data/593775/cropped.jpg'
 layout = go.Layout(
-    title='Estimating Topography from Image Data (Work in Progress)' + '<br><br>' + '[original image, original topography, estimated topography]',
+    title='[original topography, estimated topography]',
     autosize=True,
-    images=
-    [
-        dict
-        (
-            source=image_source,
-            xref="paper", yref="paper",
-            x=-0.07, y=0.83,
-            sizing="stretch",
-            sizex=0.4, sizey=0.7, layer="below",
-            xanchor='left', yanchor='top'
-        )
-    ],
-    annotations=[
-        dict(
-            x=.975,
-            y=.1,
-            xref='paper',
-            yref='paper',
-            text='WORK IN PROGRESS', #'TODO:' + '<br>' + 'Neural Net Topography' + '<br>' + 'Output Here',
-            showarrow=False,
-            font=dict(
-                    size=18,
-            )
-        )
-    ],
 )
 
 # Set up subplots. One for the lidar image, next for the original data, next for the machine learned data
 # The first subplot isn't actually used - the image is carefully placed to take up that slot
-fig = pt.make_subplots(1, 3, specs=[[{'is_3d': False}, {'is_3d': True}, {'is_3d': True}]])
-fig.append_trace(plot_data[0], 1, 2)
-fig.append_trace(plot_data[1], 1, 3)
+fig = pt.make_subplots(1, 2, specs=[[{'is_3d': True}, {'is_3d': True}]])
+fig.append_trace(plot_data[0], 1, 1)
+fig.append_trace(plot_data[1], 1, 2)
 fig['layout'].update(layout)
 fig['layout'].update(scene1=dict(camera=camera), scene2=dict(camera=camera))
 
