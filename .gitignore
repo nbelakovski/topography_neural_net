@@ -16,3 +16,5 @@ completed/
 preprocessing/
 downloading/
 failed/
+epoch_save/
+inference_save/

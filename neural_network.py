@@ -30,7 +30,7 @@ from utils import evenly_divisible_shape
 FLAGS = None
 max_input_size = 1200
 border_trim = 100  # some lidar images are rotated, so that the edges are really weird. This arbitrary number is to crop the border, to try to avoid those weird edges
-batch_size = 3
+batch_size = 10
 standard_input_size = 720  # set this to None to allow the use of full size images
 
 
@@ -60,7 +60,7 @@ def deepnn(x, x_shape, batch_size_holder):
 
     # Second convolutional layer
     with tf.name_scope('conv2'):
-        conv2_maps = 250
+        conv2_maps = 150
         w_conv2 = weight_variable([5, 5, conv1_maps, conv2_maps])
         b_conv2 = bias_variable([conv2_maps])
         h_conv2 = relu(conv2d(h_pool1, w_conv2) + b_conv2)
@@ -71,7 +71,7 @@ def deepnn(x, x_shape, batch_size_holder):
 
     # Third convolutional layer
     with tf.name_scope('conv3'):
-        conv3_maps = 250
+        conv3_maps = 125
         w_conv3 = weight_variable([4, 4, conv2_maps, conv3_maps])
         b_conv3 = bias_variable([conv3_maps])
         h_conv3 = relu(conv2d(h_pool2, w_conv3) + b_conv3)
@@ -293,7 +293,9 @@ def get_useful_directories(training_or_evaluation):
         if standard_input_size is None: return True
         with open(FLAGS.data_dir + '/' + training_or_evaluation + '/' + d + '/cropped_size.txt', 'r') as f:
             shape = [int(x) for x in f.readline().split(',')]
-            return all(x > (standard_input_size + 2* border_trim) for x in shape[:2])
+            val = all(x > (standard_input_size + 2* border_trim) for x in shape[:2])
+            if val == False: print(d, 'bad shape')
+            return val
     data_directories = [x for x in data_directories if shape_ok(x)]
     return data_directories
 
@@ -333,7 +335,7 @@ def main(_):
     train_writer = tf.summary.FileWriter(graph_location)
     train_writer.add_graph(tf.get_default_graph())
 
-    num_processes = 3  # number of processes used to populate the queue
+    num_processes = 10  # number of processes used to populate the queue
     # Set up various parameters for the training set and evaluation set
     training_directories = get_useful_directories('training')
     # Inflate the directories by a factor of 4 by adding a rotation to each one
@@ -365,11 +367,11 @@ def main(_):
 
     # Set up the code to save the network and its parameters
     saver = tf.train.Saver()
-    model_directory = "tnn_model"
+    inference_dir = "inference_save"
     model_name = "tnn"
-    model_path = os.path.join(model_directory, model_name)
-    backup_directory = "backup"
-    backup_path = os.path.join(backup_directory, model_name)  # save to two location, read from one
+    inference_save_path = os.path.join(inference_dir, model_name)
+    epoch_directory = "epoch_save"
+    epoch_save_path = os.path.join(epoch_directory, model_name)  # save to two location, read from one
 
     # In attempting to deal with GPU issues, I will try to get tensorflow to only allocate gpu memory as needed, instead
     # of having it allocate all the GPU memory, which is what it does by default
@@ -379,9 +381,12 @@ def main(_):
 
     with tf.Session(config=config) as sess:
         # Try importing the model and loading the last checkpoint, if possible. Otherwise initialize from scratch
+        starting_epoch = 0
         try:
             print("Loading model from disk...")
-            saver.restore(sess, model_path)
+            saver.restore(sess, epoch_save_path)
+            with open(os.path.join(epoch_directory, 'epoch'), 'r') as f:
+                starting_epoch = int(f.readline())
             print("Loading model from disk...done")
         except:
             print("Loading model from disk failed.")
@@ -414,9 +419,12 @@ def main(_):
             return train_accuracy, coefficient_of_determination
 
 
-        def save():
-            saver.save(sess, model_path)
-            saver.save(sess, backup_path)
+        def save(epoch=None):
+            saver.save(sess, inference_save_path)
+            if epoch:
+                saver.save(sess, epoch_save_path)
+                with open(os.path.join(epoch_directory, 'epoch'), 'w') as f:
+                    f.write(str(epoch))
 
         total_received = defaultdict(lambda: 0)
         def get_batch(queue):
@@ -433,7 +441,7 @@ def main(_):
 
 
 
-        for epoch in range(10):
+        for epoch in range(starting_epoch, starting_epoch+10):
             print("Running epoch", epoch)
             # Shuffle training directories and kick off processes to populate queue
             training_directories.sort(key= lambda x: random())  # x is unused
@@ -500,7 +508,7 @@ def main(_):
                 p.join()
             processes.clear()
 
-            # Should add code to save here, so that I can keep track of the network via epochs, and just use the eval save for some inference
+            save(epoch)
 
 
 

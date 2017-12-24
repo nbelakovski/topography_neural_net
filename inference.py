@@ -13,7 +13,7 @@ import utils
 def main(args):
   # Import data
 
-  model_directory = "tnn_model"
+  model_directory = "inference_save"
   model_name = "tnn"
   meta_name = os.path.join(model_directory,model_name) + '.meta'
   with tf.device('/cpu:0'):
