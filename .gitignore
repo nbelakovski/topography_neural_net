@@ -18,3 +18,4 @@ downloading/
 failed/
 epoch_save/
 inference_save/
+test.pickle
