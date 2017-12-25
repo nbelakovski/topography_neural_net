@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/usr/bin/python3
 
 import plotly.offline as po
 import plotly.tools as pt
@@ -57,7 +57,7 @@ layout = go.Layout(
 fig = go.Figure(data=plot_data, layout=layout)
 
 # PLOT!
-a = po.plot(fig, filename='training_statistics.html', show_link=False, output_type='div')
-with open('a.html', 'w') as f:
+a = po.plot(fig, show_link=False, output_type='div')
+with open('docs/training_statistics.html', 'w') as f:
 	f.write(a)
 print("Done")
