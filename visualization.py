@@ -56,5 +56,5 @@ fig['layout'].update(layout)
 fig['layout'].update(scene1=dict(camera=camera), scene2=dict(camera=camera))
 
 # PLOT!
-a = po.plot(fig)
+a = po.plot(fig, show_link=False, filename="docs/plots.html")
 print("Done")

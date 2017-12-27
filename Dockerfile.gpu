@@ -22,7 +22,8 @@ WORKDIR /
 RUN rm -rf /tmp/workdir
 # Other project specific dependencies
 RUN pip3 install pybind11 glymur requests scikit-image python-dateutil plotly redis
-RUN apt-get install -y libopenjp2-7-dev
+RUN apt-get install -y libopenjp2-7-dev libgraphicsmagick++1-dev libboost-python-dev
+RUN pip3 install pgmagick
 # For some reason the following packages/env variables are necessary for vim to work properly. Without them it permanently hangs the terminal you're in (docker instance can still be connected to from other terminals though)
 RUN apt-get install -y language-pack-en-base locales
 ENV LANGUAGE=en_US.UTF-8
