@@ -165,16 +165,11 @@ START FUNCTION FOR LOADING DATA INTO MEMORY
 ============================================================================================================
 """
 
-
-def load_data_file(data_info, type='training'):
-    directory = data_info['directory']
-    topo_filename = glob(os.path.join(FLAGS.data_dir, type, directory, '*data'))[0]
-    data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
-    return data
-
-def crop_data_file(data, data_info):
+def crop_data(data, data_info):
     # crop the data as appropriate
     newx, newy = calc_newshape(data.shape)
+    midx = int((data.shape[0] - newx) / 2)
+    midy = int((data.shape[1] - newy) / 2)
     if data_info['translation'] == "UL":
         data = data[0:newx, 0:newy]
     elif data_info['translation'] == "UR":
@@ -183,7 +178,31 @@ def crop_data_file(data, data_info):
         data = data[-newx:, 0:newy]
     elif data_info['translation'] == "BR":
         data = data[-newx:, -newy:]
+    elif data_info['translation'] == "Mid":
+        data = data[midx:(newx+midx), midy:(newy+midy)]
+    elif data_info['translation'] == "Mid-Top":
+        data = data[0:newx, midy:(newy+midy)]
+    elif data_info['translation'] == "Mid-Left":
+        data = data[midx:(newx+midx), 0:newy]
+    elif data_info['translation'] == "Mid-Right":
+        data = data[midx:(newx+midx), -newy:]
+    elif data_info['translation'] == "Mid-Bottom":
+        data = data[-newx:, midy:(newy+midy)]
     return data
+
+"""
+============================================================================================================
+LOADING DATA FILE FUNCTIONS
+============================================================================================================
+"""
+
+
+def load_data_file(data_info, type='training'):
+    directory = data_info['directory']
+    topo_filename = glob(os.path.join(FLAGS.data_dir, type, directory, '*data'))[0]
+    data = read_data(os.path.join(FLAGS.data_dir, type, directory, topo_filename))
+    return data
+
 
 def normalize_data_file(data):
     # It would be absurd to expect the network to learn absolute topography, which is what I believe this data is,
@@ -198,11 +217,12 @@ def normalize_data_file(data):
     data *= 1000 # maybe I have a vanishing gradient problem and maybe this will help?
     return data
 
+
 def import_data_file(data_info, type='training'):
     data = load_data_file(data_info, type)
     data = data[border_trim:-border_trim, border_trim:-border_trim]
     data = np.flipud(data) # flip it around so that the data points match the pixel layout
-    data = crop_data_file(data, data_info)
+    data = crop_data(data, data_info)
     data = np.rot90(data, data_info['rotation']/90)
     interpolate_zeros_2(data)
     data = skimage.measure.block_reduce(data, block_size=(16, 16), func=np.mean) # pool down
@@ -226,18 +246,6 @@ def load_jp2_file(image_info, type='training'):
         print(str(e))
         return None
 
-def crop_jp2_file(jp2_file, image_info):
-    newx, newy = calc_newshape(jp2_file.shape)
-    # Translate here:
-    if image_info['translation'] == "UL":
-        jp2_file = jp2_file[0:newx, 0:newy, :]
-    elif image_info['translation'] == "UR":
-        jp2_file = jp2_file[0:newx, -newy:, :]
-    elif image_info['translation'] == "BL":
-        jp2_file = jp2_file[-newx:, 0:newy, :]
-    elif image_info['translation'] == "BR":
-        jp2_file = jp2_file[-newx:, -newy:, :]
-    return jp2_file
 
 def normalize_jp2_file(jp2_file):
     jp2_file = jp2_file.astype(float)
@@ -245,11 +253,12 @@ def normalize_jp2_file(jp2_file):
     jp2_file /= np.std(jp2_file, axis=0)
     return jp2_file
 
+
 def import_jp2_file(image_info, type='training'):
     jp2_file = load_jp2_file(image_info, type)
     if jp2_file is not None:
         jp2_file = jp2_file[border_trim:-border_trim, border_trim:-border_trim, :]
-        jp2_file = crop_jp2_file(jp2_file, image_info)
+        jp2_file = crop_data(jp2_file, image_info)
         jp2_file = np.rot90(jp2_file, image_info['rotation']/90)
         jp2_file = normalize_jp2_file(jp2_file)
     else:
@@ -343,7 +352,7 @@ def main(_):
         rval = []
         # rotations and translations:
         for rotation in [0, 90, 180, 270]:
-            for translation in ["UL", "UR", "BL", "BR"]:
+            for translation in ["UL", "UR", "BL", "BR", "Mid", "Mid-Top", "Mid-Left", "Mid-Right", "Mid-Bottom"]:
                 rval.append({'directory': d, 'rotation': rotation, 'translation': translation})
         return rval
     def augment_data(directories):
@@ -386,7 +395,7 @@ def main(_):
             print("Loading model from disk...")
             saver.restore(sess, epoch_save_path)
             with open(os.path.join(epoch_directory, 'epoch'), 'r') as f:
-                starting_epoch = int(f.readline())
+                starting_epoch = int(f.readline()) + 1
             print("Loading model from disk...done")
         except:
             print("Loading model from disk failed.")
@@ -441,7 +450,7 @@ def main(_):
 
 
 
-        for epoch in range(starting_epoch, starting_epoch+10):
+        for epoch in range(starting_epoch, starting_epoch+5):
             print("Running epoch", epoch)
             # Shuffle training directories and kick off processes to populate queue
             training_directories.sort(key= lambda x: random())  # x is unused
