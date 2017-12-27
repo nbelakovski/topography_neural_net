@@ -160,6 +160,8 @@ word-wrap: break-word;
 .topcontainer {
   display: flex;
   align-items: center;
+  margin-left: -150px;
+  margin-right: -150px;
 }
 
 .container1 {
@@ -202,7 +204,7 @@ pre > code {
 }
 
 .container {
-  max-width: 1550px;
+  max-width: 1250px;
   margin: 0 auto;
   padding: 0 0.75rem;
 }
