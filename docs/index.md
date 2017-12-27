@@ -33,8 +33,14 @@ Below is an example of the end goal. On the left is a satellite image. In the mi
 topography data as taken from a LIDAR scan (heavily subsampled), and on the right is the output of the neural net applied to the image
 on the left (current image is from partial training). The image on the left is not in the training set.
 {% raw %}
+<div class="topcontainer">
+<div class="container1">
+<img width="450" height="475" align="left" src="cropped.jpg">
+</div>
+<div class="container1">
 <iframe width="1100" height="1100" align="right" src="plots.html" frameborder="0"></iframe>
-<br><br><br><br><br><br><br><br><br><br><img width="450" height="475" align="left" src="cropped.jpg">
+</div>
+</div>
 {% endraw %}
 
 ### Data source
@@ -47,10 +53,15 @@ volunteer contributions from the science community."
 Network design was iterated on several times. Ultimately, it was decided to use a simple 4 layer convolution-pooling design. Other designs were tried, including fully-connected layers at some points (ultimately discarded because the number of connections was absurdly large compared to convolutions), and deconvolutional layers (ultimately discarded after it was decided to heavily subsample to the topography data in order to avoid training the net on little details which are not relevant to the "bigger picture").
 
 ### Training
-The training data set consists of 10000 pairs of [image, LAS file] (the LAS file contains the LIDAR data). Training data is augmented by rotations (4 total) and also translations (4 total), so the effective training set size is 160000.
+The training data set consists of 10000 pairs of [image, LAS file] (the LAS file contains the LIDAR data). Training data is augmented by rotations (4 total) and also translations (4 total), so the effective training set size is 160000. Later, 5 more translations were added, bringing effective training set size to 360000.
 The evaluation data set consists of 1000 pairs.
-Training takes place on a machine rented from Paperspace with a nVidia Quadro M4000.
+Training takes place on a machine rented from Paperspace with a nVidia Quadro P6000.
 
 ### Final training statistics
-TODO!
+The network was training for 10 epochs with each epoch consisting of 160000 images. Afterwards, 5 more translations were added and the network was trained for 5 more epochs, each epoch at this point consisting of 360000 images. Every 200 batches (batch size was 10, so 2000 images) a random batch of images from the evaluation set were taken and the loss and coefficient of determination were calculated. At the end of each epoch, the entire evaluation set was evaluated. Below is a (subsampled) graph of those evaluations. You can see that the accuracy is very poor, with the coefficient of determination always below 0, but the accuracy does improve over time.
+{% raw %}
+<p align="center">
+<iframe width="1100" height="1100" src="training_statistics.html" frameborder="0"></iframe>
+</p>
+{% endraw %}
 

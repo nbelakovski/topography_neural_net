@@ -157,6 +157,15 @@ word-wrap: break-word;
   max-width: 75%;
 }
 
+.topcontainer {
+  display: flex;
+  align-items: center;
+}
+
+.container1 {
+  float:left;
+}
+
 @media (max-width: 635px) {
 .container img {
  max-width: 100%
