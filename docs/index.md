@@ -28,7 +28,7 @@ appreciate any additions or clarifications anyone would like to make.
                       A model such as this one could provide some first order estimates.
                       
 ### Training data sample
-The training data consists of an image paired with pixel level topography data. Below is a one of the image/topography pairs in the dataset.
+The training data consists of an image paired with pixel level topography data which originated from a LIDAR scan. Below is a one of the image/topography pairs in the dataset.
 In order to limit the network to learning general topography, as opposed to learning the shape of trees or such things, the topography data
 is mean-pooled with a 16x16 filter.
 {% raw %}
@@ -72,7 +72,7 @@ The evaluation data set consists of 1000 pairs.
 Training takes place on a machine rented from Paperspace with a nVidia Quadro P6000.
 
 ### Final training statistics
-The network was training for 10 epochs with each epoch consisting of 160000 images. Afterwards, 5 more translations were added and the network was trained for 5 more epochs, each epoch at this point consisting of 360000 images. Every 200 batches (batch size was 10, so 2000 images) a random batch of images from the evaluation set were taken and the loss and coefficient of determination were calculated. At the end of each epoch, the entire evaluation set was evaluated. Below is a (subsampled) graph of those evaluations. You can see that the accuracy is very poor, with the coefficient of determination always below 0, but the accuracy does improve over time.
+The network was training for 10 epochs with each epoch consisting of 160000 images. Afterwards, 5 more translations were added and the network was trained for 5 more epochs, each epoch at this point consisting of 360000 images. Every 200 batches (batch size was 10, so 2000 images) a random batch of images from the evaluation set were taken and the loss and coefficient of determination were calculated. At the end of each epoch, the entire evaluation set was evaluated. Below is a (subsampled) graph of those evaluations. You can see that the accuracy is very poor, with the coefficient of determination always below 0. While it appears that after 10 epochs, the accuracy was improving, further training with more translations showed that this was not the case.
 {% raw %}
 <p align="center">
 <iframe width="1100" height="1100" src="training_statistics.html" frameborder="0"></iframe>
