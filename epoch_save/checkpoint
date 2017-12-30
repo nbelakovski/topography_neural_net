@@ -1,0 +1,3 @@
+model_checkpoint_path: "tnn"
+all_model_checkpoint_paths: "../inference_save/tnn"
+all_model_checkpoint_paths: "tnn"
