@@ -49,10 +49,10 @@ on the left (current output is from partial training). The image on the left is 
 {% raw %}
 <div class="topcontainer">
 <div>
-<img width="450" height="475" src="cropped.jpg">
+<img width="450" height="475" src="image1.jpg">
 </div>
 <div>
-<iframe width="700" height="500" src="plots.html" frameborder="0"></iframe>
+<iframe width="700" height="500" src="image1_plots.html" frameborder="0"></iframe>
 </div>
 </div>
 {% endraw %}
@@ -61,7 +61,8 @@ on the left (current output is from partial training). The image on the left is 
 The data is coming entirely from the United States Geological Survey (USGS). The image data is from the National Agriculture
 Imagery Program (NAIP) and the topography data is LIDAR data that is hosted by the USGS, but comes from "contracts, partnerships
 with other Federal, state, tribal, or regional agencies, from direct purchases from private industry vendors, and through
-volunteer contributions from the science community."
+volunteer contributions from the science community." A custom pipeline was created to match LIDAR data with images and create a dataset.
+The dataset is being stored on Amazon Glacier and is available upon request.
 
 ### Network design
 Network design was iterated on several times. Ultimately, it was decided to use a simple 4 layer convolution-pooling design. Other designs were tried, including fully-connected layers at some points (ultimately discarded because the number of connections was absurdly large compared to convolutions), and deconvolutional layers (ultimately discarded after it was decided to heavily subsample to the topography data in order to avoid training the net on little details which are not relevant to the "bigger picture").
@@ -79,28 +80,4 @@ The network was training for 10 epochs with each epoch consisting of 160000 imag
 </p>
 {% endraw %}
 
-### Some more results from the evaluation set
-(soon)
-<!--
-{% raw %}
-<div class="topcontainer">
-<div>
-<img width="450" height="475" src="cropped.jpg">
-</div>
-<div>
-<iframe width="700" height="500" src="plots.html" frameborder="0"></iframe>
-</div>
-</div>
-{% endraw %}
-{% raw %}
-<div class="topcontainer">
-<div>
-<img width="450" height="475" src="cropped.jpg">
-</div>
-<div>
-<iframe width="700" height="500" src="plots.html" frameborder="0"></iframe>
-</div>
-</div>
-{% endraw %}
--->
-
+### [Some more results from the evaluation set](results.html)

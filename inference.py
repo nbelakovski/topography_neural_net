@@ -16,7 +16,8 @@ def main(args):
   model_directory = "inference_save"
   model_name = "tnn"
   meta_name = os.path.join(model_directory,model_name) + '.meta'
-  with tf.device('/cpu:0'):
+  device = None if len(sys.argv) == 3 and sys.argv[2] == "--gpu" else '/cpu:0'
+  with tf.device(device):
     with tf.Session(config=tf.ConfigProto(log_device_placement=False)) as sess:
       sess.run(tf.global_variables_initializer())
       saver = tf.train.import_meta_graph(meta_name)
@@ -40,8 +41,7 @@ def main(args):
       print("Running session")
       out = sess.run(op, feed_dict=feed_dict1)
       print(out[0])
-      print(out[0].dtype)
-      print(np.count_nonzero(out[0]))
+      print("Nonzero count:", np.count_nonzero(out[0]),"/",out[0].size)
       pickle.dump(out[0], open('test.pickle', 'wb'))
 
 

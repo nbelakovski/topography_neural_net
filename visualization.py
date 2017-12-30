@@ -33,7 +33,7 @@ test *= 600000
 test *= -1
 test = numpy.flipud(test)
 # Create a surface plot
-plot_data = [go.Surface(z=m, showscale=False), go.Surface(z=test[1:-1, 1:-1], showscale=False)]
+plot_data = [go.Surface(z=m, showscale=False), go.Surface(z=test[2:-2, 2:-2], showscale=False)]
 
 # Set up the camera so that the orientation of the surface is similar to the orientation of the associated image
 camera = dict(
@@ -64,5 +64,5 @@ fig['layout'].update(layout)
 fig['layout'].update(scene1=dict(camera=camera), scene2=dict(camera=camera))
 
 # PLOT!
-a = po.plot(fig, show_link=False, filename="docs/plots.html")
+a = po.plot(fig, show_link=False, filename="docs/image_plots.html")
 print("Done")

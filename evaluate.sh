@@ -9,4 +9,4 @@ python3 inference.py $IMAGE
 python3 visualization.py $DATA
 
 # Convert the image from jp2 to jpg and place it in the right folder
-python3 -c "from pgmagick import Image; Image('$IMAGE').write('docs/cropped.jpg')"
+python3 -c "from pgmagick import Image; Image('$IMAGE').write('docs/image.jpg')"
