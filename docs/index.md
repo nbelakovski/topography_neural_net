@@ -10,8 +10,7 @@ The ultimate aim of this project is to create a neural net that can accept satel
 ### Motivation
 The primary motivation for this project is as a learning exercise for myself in machine learning and convolutional neural nets.
 This project gives me an opportunity to establish a data pipeline, design a neural net, implement it, and train it and examine
-the results. I've definitely learned a lot from this opportunity to get my hands dirty, chiefly that the largest challenge is not in the network architecture, but the data gathering. The network architecture is not trivial, but once a network is established it is fairly easy to tweak it.
-Getting the data pipeline built required answering many more abstract questions and required a lot of work to set up and scale in a way that would get me meaningful amounts of data for training.
+the results. I've definitely learned a lot from this opportunity to get my hands dirty, chiefly that the largest challenge is not in the network architecture, but the data gathering. Of all the time spent on the project, probably 90% was spent on data gathering.
 
 ### Potential applications
 I must admit to a sincere ignorance of current methods of gathering topography data, and their various advantages and disadvantages.
@@ -28,17 +27,32 @@ appreciate any additions or clarifications anyone would like to make.
 * Hard-to-reach areas - Perhaps there are areas whose topology is difficult to estimate accurately due to their, ahem, topology.
                       A model such as this one could provide some first order estimates.
                       
-### Example
-Below is an example of the end goal. On the left is a satellite image. In the middle is the original
-topography data as taken from a LIDAR scan (heavily subsampled), and on the right is the output of the neural net applied to the image
-on the left (current image is from partial training). The image on the left is not in the training set.
+### Training data sample
+The training data consists of an image paired with pixel level topography data. Below is a one of the image/topography pairs in the dataset.
+In order to limit the network to learning general topography, as opposed to learning the shape of trees or such things, the topography data
+is mean-pooled with a 16x16 filter.
 {% raw %}
 <div class="topcontainer">
-<div class="container1">
-<img width="450" height="475" align="left" src="cropped.jpg">
+<div>
+<img width="450" height="475" src="training.jpg">
 </div>
-<div class="container1">
-<iframe width="1100" height="1100" align="right" src="plots.html" frameborder="0"></iframe>
+<div>
+<iframe width="700" height="500" src="training.html" frameborder="0"></iframe>
+</div>
+</div>
+{% endraw %}
+
+### Evaluation data sample
+Below is an example of the end goal. On the left is a satellite image. In the middle is the original
+topography data (subsampled), and on the right is the output of the neural net applied to the image
+on the left (current output is from partial training). The image on the left is not in the training set.
+{% raw %}
+<div class="topcontainer">
+<div>
+<img width="450" height="475" src="cropped.jpg">
+</div>
+<div>
+<iframe width="700" height="500" src="plots.html" frameborder="0"></iframe>
 </div>
 </div>
 {% endraw %}
@@ -64,4 +78,29 @@ The network was training for 10 epochs with each epoch consisting of 160000 imag
 <iframe width="1100" height="1100" src="training_statistics.html" frameborder="0"></iframe>
 </p>
 {% endraw %}
+
+### Some more results from the evaluation set
+(soon)
+<!--
+{% raw %}
+<div class="topcontainer">
+<div>
+<img width="450" height="475" src="cropped.jpg">
+</div>
+<div>
+<iframe width="700" height="500" src="plots.html" frameborder="0"></iframe>
+</div>
+</div>
+{% endraw %}
+{% raw %}
+<div class="topcontainer">
+<div>
+<img width="450" height="475" src="cropped.jpg">
+</div>
+<div>
+<iframe width="700" height="500" src="plots.html" frameborder="0"></iframe>
+</div>
+</div>
+{% endraw %}
+-->
 

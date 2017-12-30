@@ -33,23 +33,31 @@ test *= 600000
 test *= -1
 test = numpy.flipud(test)
 # Create a surface plot
-plot_data = [go.Surface(z=m), go.Surface(z=test)]
+plot_data = [go.Surface(z=m, showscale=False), go.Surface(z=test[1:-1, 1:-1], showscale=False)]
 
 # Set up the camera so that the orientation of the surface is similar to the orientation of the associated image
 camera = dict(
         up=dict(x=1, y=0, z=0),
         center=dict(x=0, y=0, z=0),
-        eye=dict(x=0, y=-.4, z=2.25)
+        eye=dict(x=0, y=-.5, z=1.75)
 )
 
 layout = go.Layout(
-    title='[original topography, estimated topography]',
-    autosize=True,
+    autosize=False,
+    width=700,
+    height=500,
+    margin=go.Margin(
+        l=0,
+        r=0,
+        b=0,
+        t=45,
+        pad=0
+    ),
 )
 
 # Set up subplots. One for the lidar image, next for the original data, next for the machine learned data
 # The first subplot isn't actually used - the image is carefully placed to take up that slot
-fig = pt.make_subplots(1, 2, specs=[[{'is_3d': True}, {'is_3d': True}]])
+fig = pt.make_subplots(1, 2, specs=[[{'is_3d': True}, {'is_3d': True}]], subplot_titles=("Original (subsampled) Topography", "Neural Net's Estimated Topography"), shared_xaxes=True)
 fig.append_trace(plot_data[0], 1, 1)
 fig.append_trace(plot_data[1], 1, 2)
 fig['layout'].update(layout)

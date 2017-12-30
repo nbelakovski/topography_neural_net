@@ -160,12 +160,7 @@ word-wrap: break-word;
 .topcontainer {
   display: flex;
   align-items: center;
-  margin-left: -150px;
-  margin-right: -150px;
-}
-
-.container1 {
-  float:left;
+  margin:auto;
 }
 
 @media (max-width: 635px) {
