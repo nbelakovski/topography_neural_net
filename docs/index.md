@@ -34,7 +34,7 @@ is mean-pooled with a 16x16 filter.
 {% raw %}
 <div class="topcontainer">
 <div>
-<img width="450" height="475" src="training.jpg">
+<img width="350" height="475" src="training.jpg">
 </div>
 <div>
 <iframe width="700" height="500" src="training.html" frameborder="0"></iframe>
@@ -51,7 +51,7 @@ in the middle towards the left. In both cases it estimates the terrain to be sub
 {% raw %}
 <div class="topcontainer">
 <div>
-<img width="450" height="475" src="image1.jpg">
+<img width="350" height="475" src="image1.jpg">
 </div>
 <div>
 <iframe width="700" height="500" src="image1_plots.html" frameborder="0"></iframe>
