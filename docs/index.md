@@ -45,7 +45,9 @@ is mean-pooled with a 16x16 filter.
 ### Evaluation data sample
 Below is an example of the end goal. On the left is a satellite image. In the middle is the original
 topography data (subsampled), and on the right is the output of the neural net applied to the image
-on the left (current output is from partial training). The image on the left is not in the training set.
+on the left. The image on the left is not in the training set. You can see that the network picks up large regions of similar color
+and picks up on gradient changes, but there are large swaths where it fails entirely, like towards the right side of the image and also
+in the middle towards the left. In both cases it estimates the terrain to be substantially higher than it really is.
 {% raw %}
 <div class="topcontainer">
 <div>
