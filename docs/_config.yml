@@ -1,7 +1,7 @@
 # Site settings
 title: Topography Neural Net
 tag_text: Topography Neural Net
-description: A responsive template for publishing single-page websites, articles that are easy on the eyes
+description: Estimating topography of a region from satellite images
 url: "https://nbelakovski.github.io/topography_neural_net/"
 baseurl: ""
 
