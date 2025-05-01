@@ -37,7 +37,7 @@ is mean-pooled with a 16x16 filter.
 <img width="350" height="475" src="training.jpg">
 </div>
 <div>
-<iframe width="700" height="500" src="training.html" frameborder="0"></iframe>
+<iframe width="750" height="520" src="training.html" frameborder="0"></iframe>
 </div>
 </div>
 {% endraw %}
@@ -54,7 +54,7 @@ in the middle towards the left. In both cases it estimates the terrain to be sub
 <img width="350" height="475" src="image1.jpg">
 </div>
 <div>
-<iframe width="700" height="500" src="image1_plots.html" frameborder="0"></iframe>
+<iframe width="750" height="520" src="image1_plots.html" frameborder="0"></iframe>
 </div>
 </div>
 {% endraw %}
